@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { loadConfig } from '../../config/env.js';
 import { db } from '../../db/client.js';
 import { jsonArray } from '../../lib/misc.js';
 import { domainHasMx } from './email.js';
@@ -27,8 +28,9 @@ export async function storeContacts(companyId: string, observations: ContactObse
   );
   const all = [...previous, ...observations];
   const mx = new Map<string, boolean | null>();
+  const checkMx = loadConfig().EMAIL_MX_CHECK;
   for (const o of all) {
-    if (o.type !== 'email') continue;
+    if (!checkMx || o.type !== 'email') continue;
     const d = o.normalizedValue.split('@')[1];
     if (d && !mx.has(d)) mx.set(d, await domainHasMx(d));
   }

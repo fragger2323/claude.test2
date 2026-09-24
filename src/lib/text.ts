@@ -1,7 +1,7 @@
 /** Text normalisation and similarity used by entity resolution. */
 
 const SPECIAL: Record<string, string> = {
-  ł: 'l', Ł: 'l', ø: 'o', Ø: 'o', ß: 'ss', đ: 'd', Đ: 'd', æ: 'ae', Æ: 'ae', œ: 'oe', Œ: 'oe', ı: 'i', þ: 'th',
+  ł: 'l', Ł: 'L', ø: 'o', Ø: 'O', ß: 'ss', đ: 'd', Đ: 'D', æ: 'ae', Æ: 'AE', œ: 'oe', Œ: 'OE', ı: 'i', þ: 'th',
 };
 
 export function stripDiacritics(s: string): string {

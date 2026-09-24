@@ -50,6 +50,8 @@ const schema = z.object({
   REANALYZE_AFTER_DAYS: int(14, 0, 365),
   ALLOW_PRIVATE_NETWORK_TARGETS: bool(false),
   RESPECT_ROBOTS_TXT: bool(true),
+  /** Look up MX records for published e-mail domains (DNS only; mailboxes are never probed). */
+  EMAIL_MX_CHECK: bool(true),
   HTTP_USER_AGENT: z
     .string()
     .default('AgencyIntelligenceOS/0.1 (+business website review; contact via configured studio site)'),

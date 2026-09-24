@@ -25,6 +25,7 @@ Object.assign(process.env, {
   RUN_WORKER_IN_PROCESS: 'true',
   WORKER_POLL_MS: '300',
   SCHEDULER_ENABLED: 'false',
+  EMAIL_MX_CHECK: 'false',
   LOG_LEVEL: process.env.LOG_LEVEL ?? 'warn',
   ...mockProviderEnv(mock.url),
 });
