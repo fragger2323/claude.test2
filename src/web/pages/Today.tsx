@@ -110,7 +110,7 @@ export default function Today() {
         </Panel>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title={`New best leads (${t.newBestLeads.length})`}>
           <LeadList leads={t.newBestLeads} empty="No new high-priority leads this week." meta={(l) => [l.company.city, l.primaryServiceSlug && titleCase(l.primaryServiceSlug), l.mainOpportunity].filter(Boolean).join(' · ')} />
         </Panel>
@@ -160,7 +160,7 @@ export default function Today() {
         </Panel>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Panel title={`Leads requiring review (${t.needsReview.length})`}>
           <LeadList leads={t.needsReview} empty="Nothing to review." meta={(l) => (l.priority === 'insufficient_data' ? 'insufficient data — run analysis' : 'website unreachable or conflicting data')} />
         </Panel>

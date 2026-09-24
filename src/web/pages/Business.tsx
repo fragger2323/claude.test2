@@ -76,7 +76,7 @@ function ProfileTab() {
   return (
     <div className="space-y-4">
       <Panel title="Studio & sender" actions={<Button variant="primary" onClick={() => save.mutate()} loading={save.isPending}>Save</Button>}>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Field label="Studio name">
             <Input value={p.studioName ?? ''} onChange={(e) => set('studioName', e.target.value)} />
           </Field>
@@ -104,7 +104,7 @@ function ProfileTab() {
         </div>
       </Panel>
       <Panel title="Target clients" actions={<Button onClick={() => requalify.mutate()} loading={requalify.isPending}>Re-score all leads</Button>}>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Preferred industries" hint="Comma-separated. Boosts Business Fit.">
             <Input value={p.preferredIndustries.join(', ')} onChange={(e) => set('preferredIndustries', list(e.target.value))} />
           </Field>
@@ -163,7 +163,7 @@ function ServiceEditor({ s, onClose }: { s: Service | null; onClose: () => void 
   const setWeight = (tag: ProblemTag, w: number) => setF({ ...f, problemTypes: [...(f.problemTypes ?? []).filter((p) => p.tag !== tag), ...(w > 0 ? [{ tag, weight: w }] : [])] });
   return (
     <Dialog open onClose={onClose} title={s ? `Edit “${s.name}”` : 'New service'} width="max-w-3xl" footer={<Button variant="primary" onClick={() => save.mutate()} loading={save.isPending}>Save</Button>}>
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <Field label="Name" className="md:col-span-2">
           <Input value={f.name ?? ''} onChange={(e) => setF({ ...f, name: e.target.value })} />
         </Field>
@@ -325,7 +325,7 @@ function PortfolioTab() {
       {q.data?.length === 0 ? (
         <EmptyState title="No projects yet">Add 3–5 of your best projects with industry, services and technologies.</EmptyState>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {q.data?.map((p) => (
             <div key={p.id} className="rounded-md border border-line p-3">
               <div className="flex items-start justify-between">
@@ -362,7 +362,7 @@ function PortfolioTab() {
         </div>
       )}
       <Dialog open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit project' : 'New project'} width="max-w-2xl" footer={<Button variant="primary" onClick={() => save.mutate()} loading={save.isPending}>Save</Button>}>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Name">
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>

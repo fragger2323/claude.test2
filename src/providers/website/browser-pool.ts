@@ -32,6 +32,7 @@ export class BrowserPool {
       .launch({
         headless: true,
         executablePath: cfg.BROWSER_EXECUTABLE_PATH,
+        chromiumSandbox: cfg.BROWSER_SANDBOX,
         args: ['--disable-dev-shm-usage', '--disable-background-networking', '--no-first-run', '--mute-audio', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp', '--webrtc-ip-handling-policy=disable_non_proxied_udp'],
       })
       .then((b) => {

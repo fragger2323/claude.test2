@@ -164,7 +164,7 @@ export default function JobResults() {
         <Stat label="Low" value={c.low ?? 0} hint={`${c.excluded ?? 0} excluded · ${c.insufficient ?? 0} insufficient`} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Panel title={`Results (${results.data?.rows.length ?? 0})`} bodyClassName="p-0" className="min-w-0">
           {results.isLoading ? (
             <div className="p-4">

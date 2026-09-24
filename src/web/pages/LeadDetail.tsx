@@ -18,10 +18,11 @@ import {
   Send,
   Sparkles,
   Target,
+  Trash2,
   Trophy,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { COMPONENT_LABELS, CRM_STAGES, CRM_STAGE_LABELS, OUTCOME_LABELS, OUTCOME_TYPES, type DecisionIntel, type Discrepancy, type EvidenceItem, type PortfolioMatchResult, type SalesPotential, type ScoreComponent } from '../../domain/types';
 import { api, download } from '../lib/api';
 import { fmtDate, hostname, money, providerName, relTime, stageLabel, titleCase } from '../lib/format';
@@ -364,6 +365,8 @@ export default function LeadDetail() {
   const [auditView, setAuditView] = useState<{ id: string; markdown: string } | null>(null);
   const [followOpen, setFollowOpen] = useState(false);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
+  const navigate = useNavigate();
   const [contactOpen, setContactOpen] = useState(false);
   const [analyzeJob, setAnalyzeJob] = useState<string | null>(null);
   const [tone, setTone] = useState('professional');
@@ -395,6 +398,15 @@ export default function LeadDetail() {
 
   const patch = useMutation({ mutationFn: (body: Record<string, unknown>) => api(`/api/leads/${id}`, { method: 'PATCH', body }), onSuccess: () => invalidate(), onError: (e) => toast.error((e as Error).message) });
   const analyze = useMutation({ mutationFn: () => api<{ jobId: string }>(`/api/leads/${id}/analyze`, { body: { visualAi: true } }), onSuccess: (r) => { setAnalyzeJob(r.jobId); toast.info('Analysis queued — the page updates when it finishes.'); } });
+  const erase = useMutation({
+    mutationFn: () => api(`/api/leads/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast.ok('Lead and company data deleted');
+      void qc.invalidateQueries({ queryKey: ['leads'] });
+      navigate('/leads');
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
   const requalify = useMutation({ mutationFn: () => api(`/api/leads/${id}/requalify`, { body: {} }), onSuccess: () => { toast.ok('Re-scored'); void invalidate(); } });
   const genAudit = useMutation({ mutationFn: (ai: boolean) => api<{ id: string }>(`/api/leads/${id}/audit`, { body: { ai, language: lang || undefined } }), onSuccess: () => { toast.ok('Audit generated'); void invalidate(); }, onError: (e) => toast.error((e as Error).message) });
   const genOutreach = useMutation({ mutationFn: () => api(`/api/leads/${id}/outreach`, { body: { tone, language: lang || undefined, channel, useAi, contactName: contactName || null } }), onSuccess: () => { toast.ok('Draft created'); void invalidate(); }, onError: (e) => toast.error((e as Error).message) });
@@ -490,10 +502,13 @@ export default function LeadDetail() {
           <Button variant="ghost" icon={<Ban className="size-3.5" />} onClick={() => patch.mutate({ doNotContact: !c.doNotContact })}>
             {c.doNotContact ? 'Allow contact' : 'Do not contact'}
           </Button>
+          <Button variant="ghost" icon={<Trash2 className="size-3.5" />} onClick={() => setEraseOpen(true)}>
+            Delete data
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           {/* Why this lead */}
           <Panel title="Why this lead">
@@ -501,7 +516,7 @@ export default function LeadDetail() {
               <EmptyState title="Not qualified yet">Run an analysis or re-score to generate the decision summary.</EmptyState>
             ) : (
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <Section title="Why this lead">
                     <ul className="list-disc space-y-1 pl-4 text-[12.5px] text-ink-2">
                       {d.whyThisLead.map((x, i) => (
@@ -517,7 +532,7 @@ export default function LeadDetail() {
                     </ul>
                   </Section>
                 </div>
-                <div className="grid gap-2 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <KnowledgeBlock title="What we know (sources)" tone="fact" items={d.knowledge.know} />
                   <KnowledgeBlock title="What we observed (measured)" tone="observed" items={d.knowledge.observed} empty="No analysis yet" />
                   <KnowledgeBlock title="What we infer" tone="infer" items={d.knowledge.infer} />
@@ -530,7 +545,7 @@ export default function LeadDetail() {
           {/* Opportunity */}
           {d && (
             <Panel title="Business opportunity">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Section title="Main pain point">
                   {d.mainPainPoint ? (
                     <div className="text-[12.5px]">
@@ -653,7 +668,7 @@ export default function LeadDetail() {
                 {(metrics.desktop || metrics.mobile) && (
                   <div className="rounded-md border border-line bg-panel-2 p-3 text-[12px]">
                     <div className="mb-1 font-medium">Measurements</div>
-                    <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       {(['desktop', 'mobile'] as const).map((vp) =>
                         metrics[vp] ? (
                           <div key={vp}>
@@ -1012,6 +1027,26 @@ export default function LeadDetail() {
       </Dialog>
       <FollowUpDialog open={followOpen} onClose={() => setFollowOpen(false)} leadId={lead.id} onDone={invalidate} />
       <OutcomeDialog open={outcomeOpen} onClose={() => setOutcomeOpen(false)} leadId={lead.id} services={services} onDone={invalidate} />
+      <Dialog
+        open={eraseOpen}
+        onClose={() => setEraseOpen(false)}
+        title="Delete all data about this company?"
+        footer={
+          <>
+            <Button onClick={() => setEraseOpen(false)}>Cancel</Button>
+            <Button variant="danger" icon={<Trash2 className="size-3.5" />} onClick={() => erase.mutate()} loading={erase.isPending}>
+              Delete permanently
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-[13px]">
+          <p>
+            Removes <strong>{c.name}</strong> with its source records, website analyses, screenshots, contacts, audits, outreach drafts and CRM history. This cannot be undone.
+          </p>
+          <p className="text-ink-3">A future search may find the business again in public sources. To keep it out of your pipeline instead, use “Do not contact”.</p>
+        </div>
+      </Dialog>
       <ContactDialog open={contactOpen} onClose={() => setContactOpen(false)} leadId={lead.id} onDone={invalidate} />
     </div>
   );
@@ -1034,7 +1069,7 @@ function FollowUpDialog({ open, onClose, leadId, onDone }: { open: boolean; onCl
   });
   return (
     <Dialog open={open} onClose={onClose} title="Schedule follow-up" footer={<Button variant="primary" onClick={() => m.mutate()} loading={m.isPending}>Schedule</Button>}>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="In">
           <Select value={days} onChange={(e) => setDays(e.target.value)}>
             {['1', '2', '3', '5', '7', '14', '30'].map((d) => (
@@ -1070,7 +1105,7 @@ function OutcomeDialog({ open, onClose, leadId, services, onDone }: { open: bool
   });
   return (
     <Dialog open={open} onClose={onClose} title="Record outcome" footer={<Button variant="primary" onClick={() => m.mutate()} loading={m.isPending}>Save</Button>}>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="Outcome">
           <Select value={type} onChange={(e) => setType(e.target.value)}>
             {OUTCOME_TYPES.map((t) => (
@@ -1118,7 +1153,7 @@ function ContactDialog({ open, onClose, leadId, onDone }: { open: boolean; onClo
   });
   return (
     <Dialog open={open} onClose={onClose} title="Add a public contact" footer={<Button variant="primary" onClick={() => m.mutate()} loading={m.isPending}>Add</Button>}>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Field label="Type">
           <Select value={type} onChange={(e) => setType(e.target.value)}>
             <option value="email">E-mail</option>

@@ -48,7 +48,7 @@ function CampaignDetail({ id }: { id: string }) {
         <Stat label="Won" value={stats.funnel.won} tone="ok" />
         <Stat label="Reply rate" value={stats.rates.replyRate.value != null ? pct(stats.rates.replyRate.value) : '—'} hint={stats.rates.replyRate.sufficient ? `n=${stats.rates.replyRate.n}` : `insufficient data (n=${stats.rates.replyRate.n})`} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel title="Funnel">
           <FunnelTable funnel={stats.funnel} />
         </Panel>

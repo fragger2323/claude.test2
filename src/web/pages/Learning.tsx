@@ -69,7 +69,7 @@ export default function Learning() {
           </>
         }
       />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title="Data sufficiency">
           <div className="tnum text-2xl font-semibold">
             {d.insights.labelledLeads} / {d.thresholds.minSamples}
@@ -117,7 +117,7 @@ export default function Learning() {
           )}
         </Panel>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title="Replies by observed problem">
           <Groups rows={d.insights.byProblem} label="Problem" />
         </Panel>

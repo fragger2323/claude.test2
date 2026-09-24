@@ -59,7 +59,7 @@ export function SecretsPanel() {
       </p>
       <ul className="space-y-2">
         {q.data.secrets.map((s) => (
-          <li key={s.name} className="grid items-center gap-2 md:grid-cols-[260px_1fr_auto]">
+          <li key={s.name} className="grid grid-cols-1 items-center gap-2 md:grid-cols-[260px_1fr_auto]">
             <div className="text-[12.5px]">
               {SECRET_LABELS[s.name] ?? s.name}
               <div className="font-mono text-[10.5px] text-ink-3">{s.name}</div>
@@ -181,7 +181,7 @@ export default function Settings() {
       ) : null}
       <SourcesPanel />
       <SecretsPanel />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel title="AI">
           {d ? (
             <div className="space-y-1 text-[12.5px]">

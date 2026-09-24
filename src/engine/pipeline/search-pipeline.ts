@@ -158,6 +158,10 @@ export class SearchPipeline {
     if (!job) throw new Error(`search job ${this.searchJobId} not found`);
     this.job = job;
     this.params = searchParamsSchema.parse(job.params);
+    if (this.params.quantity > this.cfg.JOB_MAX_LEADS) {
+      await this.appendLog([`Requested ${this.params.quantity} leads; capped at JOB_MAX_LEADS=${this.cfg.JOB_MAX_LEADS}.`]);
+      this.params = { ...this.params, quantity: this.cfg.JOB_MAX_LEADS };
+    }
     await db().searchJob.update({ where: { id: job.id }, data: { status: 'running', startedAt: job.startedAt ?? new Date(), error: null } });
     const startIdx = Math.max(0, ORDER.indexOf(job.stage as SearchStage));
     for (const stage of ORDER.slice(startIdx)) {

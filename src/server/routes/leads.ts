@@ -1,6 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
+import { rm } from 'node:fs/promises';
+import { join, resolve, sep } from 'node:path';
 import { z } from 'zod';
+import { loadConfig } from '../../config/env.js';
 import { db } from '../../db/client.js';
 import { CRM_STAGES, OUTCOME_STAGE, OUTCOME_TYPES, PRIORITIES, type CrmStage } from '../../domain/types.js';
 import { isValidEmailSyntax } from '../../engine/contacts/email.js';
@@ -196,6 +199,26 @@ export function registerLeadRoutes(app: FastifyInstance): void {
       await qualifyLead(id, { log: reqLog(req) });
     }
     return db().lead.findUnique({ where: { id } });
+  });
+
+  /**
+   * Erase a lead and everything stored about its company (e.g. on a data-deletion request):
+   * company, source records, website analyses, findings, screenshots (rows and files), contacts
+   * and CRM history. A future search may rediscover the business from public sources.
+   */
+  app.delete('/api/leads/:id', async (req) => {
+    const id = assertId((req.params as { id: string }).id);
+    const lead = await db().lead.findUnique({ where: { id }, select: { companyId: true } });
+    if (!lead) notFound('Lead');
+    const analyses = await db().analysis.findMany({ where: { companyId: lead.companyId }, select: { id: true } });
+    const [records] = await db().$transaction([db().sourceRecord.deleteMany({ where: { companyId: lead.companyId } }), db().company.delete({ where: { id: lead.companyId } })]);
+    const root = resolve(loadConfig().DATA_DIR, 'screenshots');
+    for (const a of analyses) {
+      const dir = resolve(join(root, a.id));
+      if (dir.startsWith(root + sep)) await rm(dir, { recursive: true, force: true });
+    }
+    req.log.info({ leadId: id, sourceRecords: records.count, analyses: analyses.length }, 'lead and company data erased');
+    return { ok: true, deleted: { sourceRecords: records.count, analyses: analyses.length } };
   });
 
   app.post('/api/leads/:id/analyze', async (req) => {

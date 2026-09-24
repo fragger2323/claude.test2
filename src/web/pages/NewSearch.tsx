@@ -121,7 +121,7 @@ export default function NewSearch() {
 
       <form onSubmit={submit} className="space-y-4">
         <Panel>
-          <div className="grid gap-3 md:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
             <Field label="Niche" className="md:col-span-2" hint="Any language, e.g. “стоматологии”, “dentists”, “kancelaria prawna”.">
               <Input required value={p.niche} onChange={(e) => set('niche', e.target.value)} placeholder="dental clinics" />
             </Field>
@@ -147,7 +147,7 @@ export default function NewSearch() {
           </button>
           {advanced && (
             <div className="mt-4 space-y-4">
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <Field label="Language">
                   <Select value={p.language} onChange={(e) => set('language', e.target.value)}>
                     <option value="auto">Auto (country languages)</option>
@@ -201,7 +201,7 @@ export default function NewSearch() {
                   </Select>
                 </Field>
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Field label="Preferred industries" hint="Comma-separated; boosts Business Fit.">
                   <Input value={(p.preferredIndustries ?? []).join(', ')} onChange={(e) => set('preferredIndustries', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} placeholder="implants, cosmetic" />
                 </Field>
@@ -209,7 +209,7 @@ export default function NewSearch() {
                   <Input value={(p.excludedIndustries ?? []).join(', ')} onChange={(e) => set('excludedIndustries', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} placeholder="franchise, chain" />
                 </Field>
               </div>
-              <div className="grid gap-2 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                 <Checkbox label="Exclude existing clients" checked={!!p.excludeExistingClients} onChange={(v) => set('excludeExistingClients', v)} />
                 <Checkbox label="Exclude previously contacted" checked={!!p.excludePreviouslyContacted} onChange={(v) => set('excludePreviouslyContacted', v)} />
                 <Checkbox label="Only businesses with websites" checked={!!p.onlyWithWebsite} onChange={(v) => set('onlyWithWebsite', v)} />
@@ -243,7 +243,7 @@ export default function NewSearch() {
         </Panel>
 
         <Panel>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Field label="Campaign">
               <Select value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
                 <option value="">New campaign</option>

@@ -29,11 +29,12 @@
 | Language | TypeScript (strict, ESM), Node ≥ 22 | one language for API, worker, UI |
 | API | Fastify 5 + zod validation | fast, typed, first-class hooks for auth/rate-limit |
 | DB | Prisma 6 — SQLite for local dev, PostgreSQL for production | same schema, generated PG schema + PG migrations |
+| Deploy | Docker (official Playwright base image, non-root) + Compose, or systemd | see `docs/deployment.md` |
 | Jobs | DB-backed job queue (lease-based) + separate worker process | no Redis needed; pause/resume/cancel/retry; swappable |
 | Browser | Playwright (Chromium) behind a bounded browser pool | live multi-viewport analysis |
 | AI | Anthropic Claude via `@anthropic-ai/sdk` behind `AiProvider` | optional; cached; budgeted |
 | UI | React 19 + Vite + React Router + TanStack Query/Table + Tailwind 4 + cmdk | dense, fast internal tool |
-| Tests | Vitest (unit + integration) · Playwright Test (E2E) | mock provider server + fixture websites, no network needed |
+| Tests | Vitest (unit + integration, SQLite and PostgreSQL) · Playwright Test (E2E) | mock provider server + fixture websites, no network needed |
 
 ## 3. Process topology
 
@@ -127,7 +128,8 @@ where they stopped. Counts shown on the results page are computed from the job's
 
 `Campaign` ─ `SearchJob` ─ `SearchQuery`;  `CampaignLead` joins campaigns and leads.
 `Service`, `PortfolioProject`, `BusinessProfile`, `SavedSearch`, `ModelRun`,
-`Job`, `ProviderHealth`, `ProviderUsage`, `CacheEntry`, `ProviderSecret`, `User`, `Session`.
+`Job`, `Source` (enable switch + health), `ProviderUsage`, `CacheEntry`, `SecretSetting`,
+`Setting`, `User`, `Session`.
 
 Portability rules: no DB enums (validated string unions in TS), JSON columns via Prisma
 `Json` (supported on SQLite and PostgreSQL), no raw SQL in business logic.
@@ -153,14 +155,16 @@ interval + sample size + model version + trained date).
   monthly AI token budget, usage counters (`ProviderUsage`).
 * **Security** — secrets only in env or AES-256-GCM encrypted in DB (never returned to UI),
   session auth with scrypt password hashes, SameSite=Strict cookie + custom-header CSRF guard,
-  rate limiting, zod validation on every route, SSRF guard for website fetching, CSV
-  formula-injection-safe exports, sanitized imports, CSP via helmet.
+  rate limiting (proxy trust explicit), zod validation on every route, SSRF guard for every
+  fetch and every browser request (WebSockets blocked, optional Chromium sandbox), CSV
+  formula-injection-safe exports, sanitized imports, CSP via helmet, data erasure per lead.
+  Details and residual risks: `docs/security.md`.
 * **Observability** — pino JSON logs with `provider`, `request`, `status`, `latencyMs`,
   `attempt`, `jobId`; AI request/failure logs; provider health surfaced in the UI.
 * **Compliance** — provider data-retention policies (e.g. Google/Yelp content TTL) enforced by
   a purge job; OSM attribution; outreach is draft-only, sent manually by the user.
 
-## 9. Implementation plan (executed in this order)
+## 9. Implementation plan (executed in this order — all steps done; see `docs/final-review.md`)
 
 1. Tooling, config, Prisma schema (SQLite) + generated PostgreSQL schema/migrations.
 2. Core libs (http/retry/rate-limit/normalization/SSRF/crypto) with unit tests.
@@ -175,3 +179,11 @@ interval + sample size + model version + trained date).
    CRM board, campaigns, saved searches, dashboard, learning, My Business, settings.
 8. Tests: unit, integration (pipeline against mock providers + fixture sites), E2E.
 9. Docs, security/performance/UX review, final self-audit (`docs/final-review.md`).
+10. Deployment: Dockerfile + Compose (PostgreSQL, migrations, API, worker), verified by running it;
+    the full test suite also runs on PostgreSQL (`npm run test:pg`).
+
+## 10. Documentation map
+
+`README.md` (overview, quick start) · `docs/setup.md` (install + configuration reference) ·
+`docs/providers.md` · `docs/search-engine.md` · `docs/lead-scoring.md` · `docs/data-model.md` ·
+`docs/cost-control.md` · `docs/security.md` · `docs/deployment.md` · `docs/final-review.md`.

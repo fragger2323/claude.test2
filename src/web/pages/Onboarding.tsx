@@ -40,7 +40,7 @@ export default function Onboarding() {
     <div className="mx-auto max-w-4xl space-y-4">
       <PageHeader title="Welcome — let's get your first leads" subtitle="Five short steps. Everything can be changed later." />
       <Panel>
-        <ol className="grid gap-2 md:grid-cols-5">
+        <ol className="grid grid-cols-1 gap-2 md:grid-cols-5">
           {steps.map((st) => (
             <li key={st.n} className={clsx('rounded-md border px-3 py-2', st.done ? 'border-ok/40 bg-ok-soft' : 'border-line')}>
               <div className="flex items-center gap-1.5 text-[12.5px] font-medium">

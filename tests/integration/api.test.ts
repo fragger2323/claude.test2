@@ -1,5 +1,5 @@
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
@@ -153,6 +153,32 @@ describe('exports', () => {
     expect(r.headers['content-type']).toMatch(/text\/csv/);
     expect(r.body).toContain(`"'=HYPERLINK(`);
     expect(r.body).not.toMatch(/(^|,|\n)=HYPERLINK/);
+  });
+});
+
+describe('data erasure', () => {
+  it('deletes the lead, company, source records, analyses and screenshot files', async () => {
+    const { lead, company } = await seedLead({ name: 'Erase Me Dental' });
+    await db().sourceRecord.create({ data: { provider: 'osm', providerRecordId: 'erase-1', companyId: company.id, name: 'Erase Me Dental', categories: [], phone: '+48 22 000 00 01', fetchedAt: new Date() } });
+    const w = await db().website.create({ data: { companyId: company.id, url: 'https://erase.example', status: 'found', discoveryLog: [] } });
+    const a = await db().analysis.create({ data: { websiteId: w.id, companyId: company.id, status: 'completed', url: w.url!, redirectChain: [], pagesVisited: [], metrics: {}, tech: {}, summary: {}, contactsFound: [], errors: [] } });
+    const dir = join(loadConfig().DATA_DIR, 'screenshots', a.id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'desktop-viewport.jpg'), Buffer.from([0xff, 0xd8]));
+    await db().contact.create({ data: { companyId: company.id, type: 'email', value: 'x@erase.example', normalizedValue: 'x@erase.example', source: 'website', status: 'verified', confidence: 'high', sightings: [] } });
+    await call('POST', `/api/leads/${lead.id}/activities`, { type: 'note', summary: 'to be erased' });
+
+    expect((await call('DELETE', `/api/leads/${lead.id}`, undefined, { csrf: false })).statusCode).toBe(403);
+    const r = await call('DELETE', `/api/leads/${lead.id}`);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().deleted).toEqual({ sourceRecords: 1, analyses: 1 });
+    expect(await db().company.findUnique({ where: { id: company.id } })).toBeNull();
+    expect(await db().lead.findUnique({ where: { id: lead.id } })).toBeNull();
+    expect(await db().sourceRecord.count({ where: { providerRecordId: 'erase-1' } })).toBe(0);
+    expect(await db().contact.count({ where: { companyId: company.id } })).toBe(0);
+    expect(await db().activity.count({ where: { leadId: lead.id } })).toBe(0);
+    expect(existsSync(dir)).toBe(false);
+    expect((await call('DELETE', `/api/leads/${lead.id}`)).statusCode).toBe(404);
   });
 });
 

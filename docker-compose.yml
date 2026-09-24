@@ -14,6 +14,10 @@ x-app: &app
     HOST: 0.0.0.0
     PORT: "4000"
     DATA_DIR: /data
+    # Chromium's own sandbox for analysed pages (needs the seccomp profile below).
+    BROWSER_SANDBOX: "true"
+  security_opt:
+    - seccomp=./deploy/seccomp-chromium.json
   volumes:
     - appdata:/data
   restart: unless-stopped

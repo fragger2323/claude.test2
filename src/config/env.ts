@@ -49,6 +49,8 @@ const schema = z.object({
 
   BROWSER_POOL_SIZE: int(2, 1, 8),
   BROWSER_EXECUTABLE_PATH: optStr,
+  /** Chromium's own sandbox for analysed pages. Needs a non-root user (and user namespaces); see docs/security.md. */
+  BROWSER_SANDBOX: bool(false),
   ANALYSIS_MAX_PAGES: int(4, 1, 15),
   ANALYSIS_TIMEOUT_MS: int(45_000, 5_000, 180_000),
   ANALYSIS_CONCURRENCY: int(2, 1, 8),

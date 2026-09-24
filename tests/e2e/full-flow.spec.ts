@@ -68,3 +68,26 @@ test('niche → search → qualified leads → audit → outreach → CRM', asyn
 
   expect(pageErrors).toEqual([]);
 });
+
+test('phone layout: no panel runs off the screen', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto('/');
+  await page.getByLabel('E-mail').fill('owner@studio.test');
+  await page.getByLabel('Password').fill('correct-horse-battery');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('h1')).toBeVisible();
+  const leadId = await page.evaluate(async () => (await (await fetch('/api/leads?pageSize=1')).json()).rows[0].id as string);
+  for (const path of ['/today', '/leads', `/leads/${leadId}`, '/crm', '/dashboard', '/search', '/campaigns', '/learning', '/business', '/settings']) {
+    await page.goto(path);
+    await expect(page.locator('h1').first()).toBeVisible();
+    await page.waitForTimeout(400);
+    const overflow = await page.evaluate(() => {
+      const w = document.documentElement.clientWidth;
+      return Array.from(document.querySelectorAll('section')).map((s) => ({ right: Math.round(s.getBoundingClientRect().right), text: (s.querySelector('h2')?.textContent ?? '').slice(0, 40) })).filter((s) => s.right > w + 1);
+    });
+    expect(overflow, `${path} panels overflow the 390px viewport`).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), `${path} scrolls horizontally`).toBe(true);
+  }
+  await context.close();
+});

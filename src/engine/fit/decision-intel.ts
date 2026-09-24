@@ -92,7 +92,10 @@ export function buildDecisionIntel(i: DecisionInput): DecisionIntel {
   const pain = (idx: number) => {
     const t = tags[idx];
     if (!t) return null;
-    return { title: PROBLEM_TAG_LABELS[t[0]], interpretation: interpretationFor(t[0], idx === 0 ? primaryName : i.services.secondary?.serviceName ?? primaryName), findingIds: t[1].findings.slice(0, 5).map((f) => f.id) };
+    // Name a service only if its own evidence covers this problem (no "mobile issues → maintenance").
+    const addressedBy = [i.services.primary, i.services.secondary].find((s) => s?.reasons.some((r) => r.tag === t[0]));
+    const service = addressedBy?.serviceName ?? (t[0] === 'no_website' ? primaryName : null);
+    return { title: PROBLEM_TAG_LABELS[t[0]], interpretation: interpretationFor(t[0], service), findingIds: t[1].findings.slice(0, 5).map((f) => f.id) };
   };
   const mainPain = pain(0);
   let secondPain = pain(1);

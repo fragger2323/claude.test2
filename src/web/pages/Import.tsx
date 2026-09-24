@@ -36,7 +36,7 @@ export default function Import() {
           <Field label="File (.csv or .json)" hint="Recognised columns: name/company, website/url, phone, email, address, city, postal code, country, category. JSON: an array of objects or {companies: [...]}.">
             <input type="file" accept=".csv,.json,text/csv,application/json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-[13px]" />
           </Field>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Field label="Niche (for rows without a category)">
               <Input required value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="dental clinics" />
             </Field>
