@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova Dental Clinic — Stomatologia estetyczna Warszawa Mokotów</title>
+<meta name="description" content="Nowoczesna klinika stomatologiczna na Mokotowie: implanty, ortodoncja, stomatologia estetyczna. Umów wizytę online lub zadzwoń.">
+<link rel="canonical" href="/">
+<link rel="icon" href="/favicon.ico">
+<meta property="og:title" content="Nova Dental Clinic">
+<meta property="og:image" content="/og.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Dentist","name":"Nova Dental Clinic","telephone":"+48 22 555 11 22","email":"kontakt@novadental.example.pl"}</script>
+<style>
+ *{box-sizing:border-box} body{margin:0;font-family:system-ui,sans-serif;color:#1a1a1a;background:#fff}
+ header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px}
+ nav a{margin-left:16px;color:#1a1a1a;text-decoration:none;padding:8px}
+ nav a:focus-visible{outline:3px solid #0b5fff}
+ .hero{padding:48px 24px;max-width:1100px;margin:0 auto}
+ .cta{display:inline-block;background:#0b5fff;color:#fff;padding:14px 22px;border-radius:8px;text-decoration:none;font-weight:600}
+ .cta:focus-visible{outline:3px solid #111}
+ section{max-width:1100px;margin:0 auto;padding:24px}
+ label{display:block;margin-top:8px}
+ input,textarea{width:100%;padding:10px;font-size:16px}
+ @media (max-width:600px){nav{display:none} .menu-toggle{display:block}}
+ .menu-toggle{display:none;padding:12px;font-size:16px}
+</style>
+</head>
+<body>
+<header>
+  <a href="/" aria-label="Nova Dental — strona główna"><strong>Nova Dental</strong></a>
+  <button class="menu-toggle" aria-expanded="false" aria-controls="mainnav" onclick="document.getElementById('mainnav').style.display='block';this.setAttribute('aria-expanded','true')">Menu</button>
+  <nav id="mainnav" aria-label="Główna nawigacja">
+    <a href="/uslugi.html">Usługi</a><a href="/o-nas.html">O nas</a><a href="/kontakt.html">Kontakt</a><a href="tel:+48225551122">+48 22 555 11 22</a>
+  </nav>
+</header>
+<main>
+  <div class="hero">
+    <h1>Stomatologia estetyczna na Mokotowie</h1>
+    <p>Implanty, ortodoncja i leczenie bez bólu. Pierwsza konsultacja w 7 dni.</p>
+    <a class="cta" href="/kontakt.html">Umów wizytę</a>
+  </div>
+  <section>
+    <h2>Opinie pacjentów</h2>
+    <p>„Profesjonalna opieka i świetna atmosfera” — Anna</p>
+  </section>
+  <section>
+    <h2>Kontakt</h2>
+    <form action="/send" method="post">
+      <label for="n">Imię</label><input id="n" name="name">
+      <label for="e">E-mail</label><input id="e" type="email" name="email">
+      <label for="m">Wiadomość</label><textarea id="m" name="message"></textarea>
+      <button type="submit">Wyślij</button>
+    </form>
+  </section>
+</main>
+<footer><p>© 2026 Nova Dental Clinic · <a href="mailto:kontakt@novadental.example.pl">kontakt@novadental.example.pl</a></p></footer>
+</body>
+</html>
