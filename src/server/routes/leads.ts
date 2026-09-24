@@ -417,7 +417,7 @@ export function registerLeadRoutes(app: FastifyInstance): void {
     }));
     const stamp = new Date().toISOString().slice(0, 10);
     if (q.format === 'json') return reply.header('content-disposition', `attachment; filename="leads-${stamp}.json"`).send(rows);
-    return reply.type('text/csv; charset=utf-8').header('content-disposition', `attachment; filename="leads-${stamp}.csv"`).send(`﻿${toCsv(rows, Object.keys(rows[0] ?? { company: '' }))}`);
+    return reply.type('text/csv; charset=utf-8').header('content-disposition', `attachment; filename="leads-${stamp}.csv"`).send(`\uFEFF${toCsv(rows, Object.keys(rows[0] ?? { company: '' }))}`);
   });
 }
 

@@ -10,7 +10,7 @@ export const MAX_IMPORT_ROWS = 20_000;
 
 /** Parse CSV text with a header row. Header names are trimmed and lower-cased. */
 export function parseCsv(text: string): CsvParseResult {
-  const res = Papa.parse<Record<string, string>>(text.replace(/^﻿/, ''), {
+  const res = Papa.parse<Record<string, string>>(text.replace(/^\uFEFF/, ''), {
     header: true,
     skipEmptyLines: 'greedy',
     transformHeader: (h) => h.trim().toLowerCase(),

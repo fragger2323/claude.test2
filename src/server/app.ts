@@ -26,7 +26,6 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     loggerInstance: getLogger().child({ component: 'api' }) as unknown as FastifyBaseLogger,
     trustProxy: cfg.isProd,
     bodyLimit: 2 * 1024 * 1024,
-    disableRequestLogging: cfg.isTest,
   });
 
   await app.register(helmet, {

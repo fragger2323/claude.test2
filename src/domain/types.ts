@@ -392,3 +392,14 @@ export interface ProviderRunStat {
   errors: number;
   lastError?: string;
 }
+
+export const PROVIDER_LABELS: Record<string, string> = {
+  google_places: 'Google Places',
+  foursquare: 'Foursquare',
+  yelp: 'Yelp',
+  osm: 'OpenStreetMap',
+  web_search: 'Web Search',
+  import: 'Import',
+  website: 'Official website',
+  manual: 'Manual',
+};

@@ -1,4 +1,4 @@
-import { PROBLEM_TAG_LABELS, type DecisionIntel, type LeadFitResult, type ProblemTag, type ServiceMatch } from '../../domain/types.js';
+import { PROBLEM_TAG_LABELS, PROVIDER_LABELS, type DecisionIntel, type LeadFitResult, type ProblemTag, type ServiceMatch } from '../../domain/types.js';
 import type { FindingForScoring } from './service-matching.js';
 
 /**
@@ -75,17 +75,19 @@ export function buildDecisionIntel(i: DecisionInput): DecisionIntel {
   const primaryName = i.services.primary?.serviceName ?? null;
 
   // Pain points: cluster by strongest problem tag.
-  const tagScore = new Map<ProblemTag, { score: number; findings: typeof negative }>();
+  const tagScore = new Map<ProblemTag, { score: number; findings: typeof negative; parts: number[] }>();
   for (const f of negative) {
     for (const t of f.problemTags) {
       if (t.startsWith('platform_')) continue;
-      const e = tagScore.get(t) ?? { score: 0, findings: [] };
-      e.score += (PAIN_WEIGHT[f.severity] ?? 1) * (f.kind === 'ai_observation' ? 0.6 : 1) * (CUSTOMER_VISIBLE.has(f.category) ? 1.3 : 1);
+      const e = tagScore.get(t) ?? { score: 0, findings: [], parts: [] };
+      e.parts.push((PAIN_WEIGHT[f.severity] ?? 1) * (f.kind === 'ai_observation' ? 0.6 : 1) * (CUSTOMER_VISIBLE.has(f.category) ? 1.3 : 1));
       e.findings.push(f);
       tagScore.set(t, e);
     }
   }
-  if (i.website.status === 'not_found') tagScore.set('no_website', { score: 99, findings: [] });
+  // Diminishing returns: one severe problem outweighs many minor ones of another kind.
+  for (const e of tagScore.values()) e.score = [...e.parts].sort((a, b) => b - a).reduce((s, p, idx) => s + p * 0.6 ** idx, 0);
+  if (i.website.status === 'not_found') tagScore.set('no_website', { score: 99, findings: [], parts: [] });
   const tags = [...tagScore.entries()].sort((a, b) => b[1].score - a[1].score);
   const pain = (idx: number) => {
     const t = tags[idx];
@@ -147,7 +149,7 @@ export function buildDecisionIntel(i: DecisionInput): DecisionIntel {
   else if (phone) bestContactChannel = { channel: 'phone', value: phone.value, reason: `${phone.status === 'verified' ? 'Verified' : 'Listed'} business phone.`, complianceNote: consentNote };
 
   const know: string[] = [];
-  know.push(`Found in ${i.company.sources.length} source(s): ${i.company.sources.join(', ')}.`);
+  know.push(`Found in ${i.company.sources.length} source(s): ${i.company.sources.map((x) => PROVIDER_LABELS[x] ?? x).join(', ')}.`);
   if (i.company.ratingCount != null) know.push(`${i.company.ratingCount} public reviews${i.company.rating != null ? ` (avg ${i.company.rating.toFixed(1)})` : ''} according to listings.`);
   if (i.company.businessStatus !== 'unknown') know.push(`Business status per sources: ${i.company.businessStatus.replace('_', ' ')}.`);
   if (i.website.url) know.push(`Official website: ${i.website.url}${i.website.platform ? ` (${i.website.platform})` : ''}.`);

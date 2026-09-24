@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-export const BUSINESS_MODELS = ['any', 'local_service', 'healthcare', 'hospitality', 'professional_services', 'retail', 'ecommerce', 'b2b'] as const;
-export const PRICE_SEGMENTS = ['any', 'budget', 'mid', 'premium'] as const;
-export const COMPANY_SIZES = ['any', 'small', 'medium', 'large'] as const;
+import { BUSINESS_MODELS, COMPANY_SIZES, PRICE_SEGMENTS } from './search-options.js';
+
+export { BUSINESS_MODELS, COMPANY_SIZES, PRICE_SEGMENTS };
 
 const trimmed = (max: number) => z.string().trim().min(1).max(max);
 

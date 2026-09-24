@@ -73,13 +73,17 @@ function websiteNeed(i: LeadFitInput): ScoreComponent {
   }
   const negative = i.findings.filter((f) => f.polarity === 'negative');
   let points = 0;
-  const byCategory = new Map<string, { pts: number; n: number; top: string }>();
+  const byCategory = new Map<string, { pts: number; n: number; top: string; topPts: number }>();
   for (const f of negative) {
     const p = (SEV_POINTS[f.severity] ?? 3) * (CONF_MULT[f.confidence] ?? 0.8) * (f.kind === 'ai_observation' ? 0.6 : 1);
     points += p;
-    const c = byCategory.get(f.category) ?? { pts: 0, n: 0, top: f.title };
+    const c = byCategory.get(f.category) ?? { pts: 0, n: 0, top: f.title, topPts: 0 };
     c.pts += p;
     c.n++;
+    if (p > c.topPts) {
+      c.top = f.title;
+      c.topPts = p;
+    }
     byCategory.set(f.category, c);
   }
   const score = Math.round(100 * (1 - Math.exp(-points / 60)));

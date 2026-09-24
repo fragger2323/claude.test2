@@ -105,7 +105,7 @@ function attachCollectors(page: Page, run: ViewportRun, siteDomain: string | nul
 }
 
 async function navigate(page: Page, url: string, timeoutMs: number): Promise<{ status?: number; finalUrl: string }> {
-  let response = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs }).catch(async (e: unknown) => {
+  const response = await page.goto(url, { waitUntil: 'load', timeout: timeoutMs }).catch(async (e: unknown) => {
     if (/Timeout/i.test(errorMessage(e))) {
       // Heavy pages: accept DOM ready if full load exceeded the budget.
       return page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.round(timeoutMs / 2) });

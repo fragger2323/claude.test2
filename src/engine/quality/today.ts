@@ -69,6 +69,11 @@ export async function todayOverview(now = new Date()) {
     actions.push({ id: 'record_outcomes', title: `${contactedNoOutcome.length} lead(s) contacted 14+ days ago with no recorded result`, detail: 'Mark “No reply” or the actual outcome so priority and the learning model improve.', count: contactedNoOutcome.length, leadIds: contactedNoOutcome.map((l) => l.id), link: '/crm?stage=contacted', urgency: 'low' });
   }
   const reviewIds = [...new Set([...review.map((l) => l.id), ...conflictLeadIds])];
+  const extra = conflictLeadIds.filter((id) => !review.some((l) => l.id === id)).slice(0, 20);
+  if (extra.length) {
+    const more = await db().lead.findMany({ where: { id: { in: extra }, stage: { notIn: ['won', 'lost'] } }, select: { ...leadSelect, company: { select: { ...leadSelect.company.select, discrepancies: true } } } });
+    review.push(...more);
+  }
   if (reviewIds.length) {
     actions.push({ id: 'review_leads', title: `${reviewIds.length} lead(s) need review`, detail: 'Insufficient data, unreachable websites or conflicting source data.', count: reviewIds.length, leadIds: reviewIds.slice(0, 100), link: '/leads?review=1', urgency: 'low' });
   }
