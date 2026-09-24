@@ -156,6 +156,23 @@ describe('exports', () => {
   });
 });
 
+describe('exports at scale', () => {
+  it('exports more leads than SQLite can bind in one IN list', async () => {
+    const n = 1100;
+    const ids = Array.from({ length: n }, (_, i) => `bulk${String(i).padStart(6, '0')}`);
+    await db().company.createMany({ data: ids.map((id, i) => ({ id, name: `Bulk ${i}`, normalizedName: `bulk ${i}`, categories: [], sources: ['osm'], discrepancies: [], country: 'PL' })) });
+    await db().lead.createMany({ data: ids.map((id) => ({ id: `l${id}`, companyId: id, priority: 'medium', priorityRank: 2, priorityReasons: [] })) });
+    await db().website.createMany({ data: ids.map((id) => ({ id: `w${id}`, companyId: id, url: `https://${id}.example`, status: 'found', discoveryLog: [] })) });
+    await db().analysis.createMany({ data: ids.map((id) => ({ id: `a${id}`, websiteId: `w${id}`, companyId: id, status: 'completed', url: `https://${id}.example`, redirectChain: [], pagesVisited: [], metrics: {}, tech: {}, summary: {}, contactsFound: [], errors: [] })) });
+    await db().finding.createMany({ data: ids.map((id) => ({ analysisId: `a${id}`, companyId: id, code: 'ux.no_cta', category: 'ux', title: 'No clear call-to-action', detail: 'd', evidence: [], problemTags: ['weak_cta'] })) });
+    const r = await call('GET', '/api/export/leads?format=json');
+    expect(r.statusCode).toBe(200);
+    const rows = r.json() as Array<{ company: string; top_findings: string }>;
+    expect(rows.length).toBeGreaterThanOrEqual(n);
+    expect(rows.find((x) => x.company === 'Bulk 1099')?.top_findings).toContain('No clear call-to-action');
+  });
+});
+
 describe('settings & secrets', () => {
   it('stores API keys encrypted and never returns them', async () => {
     const secret = 'AIzaSyTESTSECRET1234567890abcdef';

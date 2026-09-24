@@ -15,7 +15,7 @@ export default defineConfig({
     fileParallelism: false,
     env: {
       NODE_ENV: 'test',
-      DATABASE_URL: 'file:../tests/.tmp/vitest.db',
+      DATABASE_URL: process.env.TEST_DATABASE_URL ?? 'file:../tests/.tmp/vitest.db',
       DATA_DIR: 'tests/.tmp/vitest-data',
       ALLOW_PRIVATE_NETWORK_TARGETS: 'true',
       APP_ENCRYPTION_KEY: 'a'.repeat(64),

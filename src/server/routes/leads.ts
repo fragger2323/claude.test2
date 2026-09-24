@@ -390,7 +390,8 @@ export function registerLeadRoutes(app: FastifyInstance): void {
       },
     });
     const ids = leads.map((l) => l.companyId);
-    const findings = await db().finding.findMany({ where: { companyId: { in: ids }, polarity: 'negative' }, orderBy: { detectedAt: 'desc' }, select: { companyId: true, title: true, kind: true } });
+    // detectedAt must be selected: Prisma splits large IN lists into chunks and merge-sorts on it.
+    const findings = await db().finding.findMany({ where: { companyId: { in: ids }, polarity: 'negative' }, orderBy: { detectedAt: 'desc' }, select: { companyId: true, title: true, kind: true, detectedAt: true } });
     const byCompany = new Map<string, string[]>();
     for (const f of findings) byCompany.set(f.companyId, [...(byCompany.get(f.companyId) ?? []), `${f.kind === 'ai_observation' ? '[AI] ' : ''}${f.title}`]);
     const rows = leads.map((l) => ({

@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadConfig } from '../config/env.js';
+import { loadConfig, trustProxySetting } from '../config/env.js';
 import { getLogger } from '../lib/logger.js';
 import { db } from '../db/client.js';
 import { registerAuthHooks, registerAuthRoutes } from './auth.js';
@@ -24,7 +24,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const cfg = loadConfig();
   const app: FastifyInstance = Fastify({
     loggerInstance: getLogger().child({ component: 'api' }) as unknown as FastifyBaseLogger,
-    trustProxy: cfg.isProd,
+    trustProxy: trustProxySetting(cfg.TRUST_PROXY),
     bodyLimit: 2 * 1024 * 1024,
   });
 

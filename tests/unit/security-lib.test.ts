@@ -63,3 +63,17 @@ describe('env validation', () => {
     expect(() => parseConfig({ NODE_ENV: 'production', APP_ENCRYPTION_KEY: 'a'.repeat(64), SETUP_TOKEN: 'x'.repeat(24) })).not.toThrow();
   });
 });
+
+describe('proxy trust', () => {
+  it('is off unless explicitly configured', async () => {
+    const { trustProxySetting } = await import('../../src/config/env.js');
+    expect(trustProxySetting('false')).toBe(false);
+    expect(trustProxySetting('')).toBe(false);
+    const oneHop = trustProxySetting('1') as (a: string, hop: number) => boolean;
+    expect(oneHop('10.0.0.1', 0)).toBe(true);
+    expect(oneHop('203.0.113.9', 1)).toBe(false);
+    expect(trustProxySetting('true')).toBe(true);
+    expect(trustProxySetting('10.0.0.0/8,127.0.0.1')).toBe('10.0.0.0/8,127.0.0.1');
+    expect(parseConfig({ NODE_ENV: 'production', APP_ENCRYPTION_KEY: 'a'.repeat(64) }).config.TRUST_PROXY).toBe('false');
+  });
+});

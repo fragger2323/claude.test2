@@ -68,6 +68,11 @@ async function guardContext(ctx: BrowserContext, blocked: string[]): Promise<voi
       return route.abort('blockedbyclient');
     }
   });
+  // route() does not see WebSockets: never let an analysed page open one (it could probe internal services).
+  await ctx.routeWebSocket(/.*/, (ws) => {
+    if (blocked.length < 50) blocked.push(`websocket ${ws.url().slice(0, 190)}`);
+    void ws.close({ code: 1008, reason: 'blocked by analyzer' });
+  });
 }
 
 function attachCollectors(page: Page, run: ViewportRun, siteDomain: string | null): void {

@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { db } from '../db/client.js';
 import { searchParamsSchema } from '../domain/search-params.js';
@@ -10,6 +10,7 @@ import { analyzeCompanyWebsite } from '../engine/analysis/analysis-service.js';
 import { contactsFromSources } from '../engine/contacts/contact-discovery.js';
 import { storeContacts } from '../engine/contacts/contact-store.js';
 import { discoverWebsite } from '../engine/discovery/website-discovery.js';
+import { mergeRecords } from '../engine/resolution/entity-resolution.js';
 import { loadActiveModel } from '../engine/learning/trainer.js';
 import { JobControlSignal, recordFromRow, SearchPipeline } from '../engine/pipeline/search-pipeline.js';
 import { qualifyLead } from '../engine/qualify/qualify-lead.js';
@@ -114,8 +115,19 @@ export async function runMaintenance(ctx: { log: Logger }): Promise<Record<strin
   if (expired.length) {
     await db().sourceRecord.updateMany({
       where: { id: { in: expired.map((e) => e.id) } },
-      data: { name: null, address: null, street: null, phone: null, email: null, website: null, payload: undefined, rating: null, ratingCount: null, priceLevel: null, lat: null, lng: null, purgedAt: now },
+      data: { name: null, address: null, street: null, phone: null, email: null, website: null, payload: Prisma.DbNull, rating: null, ratingCount: null, priceLevel: null, lat: null, lng: null, purgedAt: now },
     });
+    // Provider-only attributes copied onto the merged company are rebuilt from the records that are
+    // still within retention (or cleared when none remain). Name/address/phone stay as CRM identity.
+    const companyIds = [...new Set(expired.map((e) => e.companyId).filter((id): id is string => !!id))];
+    for (const companyId of companyIds) {
+      const remaining = await db().sourceRecord.findMany({ where: { companyId, purgedAt: null } });
+      const merged = remaining.length ? mergeRecords(remaining.map(recordFromRow)) : null;
+      await db().company.update({
+        where: { id: companyId },
+        data: { rating: merged?.rating ?? null, ratingCount: merged?.ratingCount ?? null, priceLevel: merged?.priceLevel ?? null, lat: merged?.lat ?? null, lng: merged?.lng ?? null },
+      });
+    }
     // Contacts known ONLY from purged provider records are marked expired (not deleted: provenance stays visible).
     const byCompany = new Map<string, Set<string>>();
     for (const e of expired) if (e.companyId) byCompany.set(e.companyId, new Set([...(byCompany.get(e.companyId) ?? []), e.provider]));

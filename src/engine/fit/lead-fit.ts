@@ -220,7 +220,7 @@ function contactability(i: LeadFitInput): ScoreComponent {
 }
 
 function technicalOpportunity(i: LeadFitInput): ScoreComponent {
-  if (!i.website.analyzed) return { key: 'technicalOpportunity', label: COMPONENT_LABELS.technicalOpportunity, score: i.website.status === 'not_found' ? null : null, weight: 0, factors: [{ label: 'No technical analysis available', points: 0, kind: 'gap' }] };
+  if (!i.website.analyzed) return { key: 'technicalOpportunity', label: COMPONENT_LABELS.technicalOpportunity, score: null, weight: 0, factors: [{ label: 'No technical analysis available', points: 0, kind: 'gap' }] };
   const codes = new Set(i.findings.filter((f) => f.polarity === 'negative' && f.kind !== 'ai_observation' && ['technical', 'performance', 'seo', 'accessibility', 'security'].includes(f.category)).map((f) => f.code));
   const score = Math.min(100, codes.size * 12);
   return { key: 'technicalOpportunity', label: COMPONENT_LABELS.technicalOpportunity, score, weight: 0, factors: [{ label: `${codes.size} distinct technical/performance/SEO/accessibility issue types measured`, points: score, kind: 'observation' }] };

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import pino from 'pino';
 import { db } from '../../src/db/client.js';
 import { claimNextJob, completeJob, enqueueJob, failJob, heartbeat, requeueStaleJobs } from '../../src/jobs/queue.js';
-import { runHandler } from '../../src/jobs/handlers.js';
+import { runHandler, runMaintenance } from '../../src/jobs/handlers.js';
 import { trainOutcomeModel, loadActiveModel, MIN_SAMPLES } from '../../src/engine/learning/trainer.js';
 import { mulberry32 } from '../../src/engine/learning/logistic.js';
 import { parseImport } from '../../src/providers/import/index.js';
@@ -151,5 +151,33 @@ describe('CSV / JSON import', () => {
     } finally {
       await app.close();
     }
+  });
+});
+
+describe('data retention', () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+
+  it('purges expired provider content (incl. raw payload), rebuilds provider-only company fields and expires listing-only contacts', async () => {
+    const { company } = await seedLead({ name: 'Retention Dental' });
+    await db().company.update({ where: { id: company.id }, data: { rating: 4.9, ratingCount: 300, priceLevel: 3, lat: 52.2, lng: 21 } });
+    const past = new Date(Date.now() - 60_000);
+    await db().sourceRecord.create({ data: { provider: 'google_places', providerRecordId: 'gp_ret', companyId: company.id, name: 'Retention Dental', categories: ['dentist'], phone: '+48 22 123 45 67', rating: 4.9, ratingCount: 300, priceLevel: 3, lat: 52.2, lng: 21, payload: { reviews: ['great'] }, fetchedAt: past, retentionExpiresAt: past } });
+    await db().sourceRecord.create({ data: { provider: 'osm', providerRecordId: 'osm_ret', companyId: company.id, name: 'Retention Dental', categories: ['dentist'], lat: 52.21, lng: 21.01, fetchedAt: new Date() } });
+    const listingOnly = await db().contact.create({ data: { companyId: company.id, type: 'phone', value: '+48 22 123 45 67', normalizedValue: '+48221234567', source: 'google_places', status: 'probable', confidence: 'medium', sightings: [{ source: 'google_places', observedAt: past.toISOString(), onOfficialSite: false }] } });
+    const onSite = await db().contact.create({ data: { companyId: company.id, type: 'email', value: 'info@retention.pl', normalizedValue: 'info@retention.pl', source: 'website', status: 'verified', confidence: 'high', sightings: [{ source: 'google_places', observedAt: past.toISOString(), onOfficialSite: false }, { source: 'website', observedAt: past.toISOString(), onOfficialSite: true }] } });
+
+    const r = await runMaintenance({ log });
+    expect(r.purgedSourceRecords).toBe(1);
+    const purged = await db().sourceRecord.findFirst({ where: { providerRecordId: 'gp_ret' } });
+    expect(purged).toMatchObject({ name: null, phone: null, rating: null, payload: null });
+    expect(purged!.purgedAt).not.toBeNull();
+    expect(purged!.providerRecordId).toBe('gp_ret'); // IDs may be kept
+    const c = await db().company.findUnique({ where: { id: company.id } });
+    expect(c).toMatchObject({ rating: null, ratingCount: null, priceLevel: null, lat: 52.21, lng: 21.01, name: 'Retention Dental' });
+    expect((await db().contact.findUnique({ where: { id: listingOnly.id } }))!.expiredAt).not.toBeNull();
+    expect((await db().contact.findUnique({ where: { id: onSite.id } }))!.expiredAt).toBeNull();
+    expect((await runMaintenance({ log })).purgedSourceRecords).toBe(0);
   });
 });

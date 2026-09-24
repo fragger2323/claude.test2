@@ -30,6 +30,11 @@ const schema = z.object({
   HOST: z.string().default('127.0.0.1'),
   PORT: int(4000, 1, 65535),
   APP_URL: optStr,
+  /**
+   * Trust X-Forwarded-* headers (client IP for rate limiting, protocol). Only enable behind a
+   * reverse proxy: "true", a hop count ("1") or a comma-separated list of proxy IPs/CIDRs.
+   */
+  TRUST_PROXY: z.string().trim().default('false'),
   APP_ENCRYPTION_KEY: optStr,
   SETUP_TOKEN: optStr,
   SESSION_TTL_HOURS: int(24 * 14, 1, 24 * 90),
@@ -143,6 +148,9 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): { config: App
   if (isProd && c.ALLOW_PRIVATE_NETWORK_TARGETS) {
     throw new Error('ALLOW_PRIVATE_NETWORK_TARGETS must not be enabled in production (SSRF risk).');
   }
+  if (c.TRUST_PROXY === 'true' && isProd) {
+    warnings.push({ key: 'TRUST_PROXY', message: 'trusts any X-Forwarded-For hop — prefer a hop count or the proxy address' });
+  }
   if (isProd && !c.APP_URL) {
     warnings.push({ key: 'APP_URL', message: 'not set — origin checks fall back to the Host header' });
   }
@@ -178,4 +186,15 @@ export function configWarnings(): ConfigWarning[] {
 /** Test helper: re-read process.env. */
 export function resetConfigForTests(): void {
   cached = null;
+}
+
+/** Fastify `trustProxy` value from TRUST_PROXY (a hop count becomes a hop-count predicate). */
+export function trustProxySetting(value: string): boolean | string | ((address: string, hop: number) => boolean) {
+  if (value === '' || value === 'false' || value === '0') return false;
+  if (value === 'true') return true;
+  if (/^\d+$/.test(value)) {
+    const hops = Number(value);
+    return (_address: string, hop: number) => hop < hops;
+  }
+  return value;
 }

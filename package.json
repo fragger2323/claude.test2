@@ -31,6 +31,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
+    "test:pg": "node scripts/test-pg.mjs",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
@@ -46,6 +47,7 @@
     "papaparse": "5.7.0",
     "pino": "9.14.0",
     "playwright": "1.56.1",
+    "prisma": "6.19.3",
     "tldts": "^7.0.17",
     "undici": "^7.16.0",
     "zod": "4.6.5"
@@ -68,7 +70,6 @@
     "globals": "16.5.0",
     "lucide-react": "0.577.0",
     "pino-pretty": "13.1.3",
-    "prisma": "6.19.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-router": "7.18.4",
