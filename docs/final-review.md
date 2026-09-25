@@ -54,6 +54,7 @@ mocks and local websites (§6). Treat the first week of real use as the final ac
 | "HTTPS missing" on timeout or 403 | HTTPS = TLS produced any response; timeout = unknown | hostile tests |
 | Broken-link false positives | GET confirms HEAD failures; 401/403/405/429/timeouts unverifiable | — (logic in `http-checks.ts`) |
 | Self-inflicted console errors | filtered (blocked requests, refused WebSockets) | — |
+| A frozen-page analysis (`failed`) read "Website found but not analysed yet" (found in the scale run) | reasons say the analysis failed and nothing was concluded | `adversarial-fixes.test.ts` |
 | Agency e-mail as business contact | credit-line filter; foreign-domain → probable; free-mail allowed | hostile test, unit test |
 | False "no website" | `unverified` website state end to end (discovery, scoring, services, decision notes, counts, filters, UI, *Add website* endpoint) | unit + pipeline + API tests |
 | Fetch-time freshness | new freshness model; `SourceRecord.sourceUpdatedAt` (+ SQLite and PostgreSQL migrations); OSM `out meta` | `scoring.test.ts`, unit tests |
@@ -95,8 +96,8 @@ ranked leads keep appearing from the first minutes. `BROWSER_POOL_SIZE` and
 |---|---|
 | `npm run lint` (zero warnings allowed) | pass (0 problems) |
 | `npm run typecheck` (server + web, strict) | pass |
-| `npm test`: unit + integration on SQLite | pass: 188/188 tests in 19 files |
-| `npm run test:pg`: the same suite on PostgreSQL 16 through the real migrations (incl. the new one) | pending (run in progress) |
+| `npm test`: unit + integration on SQLite | pass: 189/189 tests in 19 files |
+| `npm run test:pg`: the same suite on PostgreSQL 16 through the real migrations (incl. the new one) | pass: 189/189; `prisma migrate deploy` applied `20260925065312_source_updated_at` |
 | `npm run build` | pass (web + server bundles) |
 | `npm run test:e2e`: full flow + 390 px phone layout on 10 pages | pass: 2/2 |
 | `npm run test:scale` | pending (run in progress) |
