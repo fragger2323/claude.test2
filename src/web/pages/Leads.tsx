@@ -107,7 +107,7 @@ export default function Leads() {
               {hostname(row.original.website)} <ExternalLink className="size-3" />
             </a>
           ) : (
-            <span className="text-ink-3">{row.original.websiteStatus === 'not_found' ? 'none' : '—'}</span>
+            <span className="text-ink-3">{row.original.websiteStatus === 'not_found' ? 'none' : row.original.websiteStatus === 'unverified' ? 'not verified' : '—'}</span>
           ),
       },
       { id: 'websiteNeed', header: () => sortHeader('websiteNeed', 'Website need'), cell: ({ row }) => <ScoreBar value={row.original.websiteNeed} /> },
@@ -206,6 +206,7 @@ export default function Leads() {
           <option value="">Any website</option>
           <option value="found">Has website</option>
           <option value="not_found">No website</option>
+              <option value="unverified">Website not verified</option>
           <option value="unreachable">Unreachable</option>
         </Select>
         <Select className="h-7 text-[12px]" value={f.contact} onChange={(e) => setFilter('contact', e.target.value)} aria-label="Contact availability">

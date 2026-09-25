@@ -75,7 +75,10 @@ export type NonOfficialKind =
   | 'marketplace'
   | 'link_hub'
   | 'search'
-  | 'reference';
+  | 'reference'
+  | 'media'
+  | 'jobs'
+  | 'government';
 
 /**
  * Domains that are never a company's *official* website (profiles, directories, platforms).
@@ -85,10 +88,14 @@ const NON_OFFICIAL: Array<[RegExp, NonOfficialKind]> = [
   [/^(facebook|fb|instagram|linkedin|twitter|x|tiktok|youtube|youtu|pinterest|threads|vk|ok|telegram|t|whatsapp|wa|snapchat|tumblr|behance|dribbble)\.[a-z.]+$/, 'social'],
   [/^(yelp|foursquare|tripadvisor|trustpilot|opinie|zoover|clutch|goodfirms|sortlist|glassdoor|gowork|kununu)\.[a-z.]+$/, 'review'],
   [/^(google|goo|bing|apple|here|waze|mapy|openstreetmap|osm|2gis|yandex)\.[a-z.]+$/, 'map'],
-  [/^(booksy|treatwell|fresha|doctolib|znanylekarz|docplanner|jameda|doktortakpan|medonet|zocdoc|mediately|booking|airbnb|hotels|expedia|agoda|thefork|opentable|resy|quandoo|calendly|setmore|simplybook)\.[a-z.]+$/, 'booking'],
+  [/^(booksy|treatwell|fresha|doctolib|znanylekarz|docplanner|jameda|doktortakpan|medonet|zocdoc|mediately|booking|airbnb|hotels|expedia|agoda|thefork|opentable|resy|quandoo|calendly|setmore|simplybook|moment|versum|bookero)\.[a-z.]+$/, 'booking'],
   [/^(pyszne|ubereats|uber|glovo|glovoapp|wolt|deliveroo|justeat|just-eat|lieferando|foodpanda|bolt|takeaway|doordash|grubhub)\.[a-z.]+$/, 'delivery'],
-  [/^(allegro|olx|amazon|ebay|etsy|aliexpress|otodom|morizon|gratka|domiporta|idealista|immobilienscout24|rightmove|zillow|sreality|bazos)\.[a-z.]+$/, 'marketplace'],
-  [/^(pkt|panoramafirm|aleo|oferteo|fixly|zumi|firmy|zlatestranky|gelbeseiten|dasoertliche|yellowpages|yell|pagesjaunes|paginegialle|paginasamarillas|infobel|cylex|hotfrog|europages|kompass|dnb|bizapedia|opencorporates|rejestr|krs-online|biznes|ceidg|owg|firmania|mojepanstwo|imsig|northdata|companieshouse)\.[a-z.]+$/, 'directory'],
+  [/^(allegro|olx|amazon|ebay|etsy|aliexpress|otodom|morizon|gratka|domiporta|idealista|immobilienscout24|rightmove|zillow|sreality|bazos|gumtree|sprzedajemy|lento|groupon|oferia|zleca|useme|houzz|bark|thumbtack|angi|homeadvisor|checkatrade|trustatrader|ratedpeople|mybuilder|nextdoor|kleinanzeigen|willhaben|marktplaats|leboncoin|subito|wallapop|avito|prom|rozetka)\.[a-z.]+$/, 'marketplace'],
+  [/^(pkt|panoramafirm|aleo|oferteo|fixly|zumi|firmy|zlatestranky|gelbeseiten|dasoertliche|yellowpages|yell|pagesjaunes|paginegialle|paginasamarillas|infobel|cylex|hotfrog|europages|kompass|dnb|bizapedia|opencorporates|rejestr|krs-online|biznes|ceidg|owg|firmania|mojepanstwo|imsig|northdata|companieshouse|biznesfinder|targeo|kliniki|medme|infoveriti|biznesradar|bizraport|krs-pobierz|e-krs|regon|nip24|aleo24|firmyzpolski|polskiefirmy|baza-firm|bazafirm|katalog-firm|katalogfirm|firmo|tupalo|brownbook|n49|11880|golocal|meinestadt|herold|local|search|firmy-cz|najisto|zivefirmy|123people|manta|chamberofcommerce|cybo|foursquare|justdial|sulekha|2gis)\.[a-z.]+$/, 'directory'],
+  // Registrable labels that are clearly directories ("cylex-polska.pl", "katalog-firm-xyz.pl")
+  [/(^|-)(cylex|yellowpages|katalog-firm|katalogfirm|baza-firm|bazafirm|branchenbuch|firmenverzeichnis|adresar-firem)(-|\.)/, 'directory'],
+  [/^(naszemiasto|wyborcza|gazeta|onet|interia|wp|o2|tvn24|money|bankier|forbes|businessinsider|medium|substack|rp|polsatnews|se|fakt|natemat|spidersweb|bbc|cnn|nytimes|theguardian|spiegel|bild|focus|idnes|novinky|seznamzpravy|pravda|ukrinform|tsn|unian|lenta|rbc|elpais|lemonde|corriere|repubblica|telegraaf|nu)\.[a-z.]+$/, 'media'],
+  [/^(pracuj|indeed|jooble|infopraca|praca|olxpraca|jobs|stepstone|monster|workable|nofluffjobs|justjoin|rocketjobs|jobsora|careerjet|work|robota|rabota|hh)\.[a-z.]+$/, 'jobs'],
   [/^(linktr|linktree|beacons|carrd|bio|taplink|lnk)\.[a-z.]+$/, 'link_hub'],
   [/^(wikipedia|wikidata|wikimedia)\.org$/, 'reference'],
   [/^(duckduckgo|yahoo|baidu|brave|startpage|ecosia|search)\.[a-z.]+$/, 'search'],
@@ -98,6 +105,8 @@ export function classifyNonOfficialDomain(urlOrHost: string | null | undefined):
   const reg = registrableDomain(urlOrHost);
   const host = hostOf(urlOrHost);
   if (!reg || !host) return null;
+  // government portals (private schools legitimately use .edu.xx, so .edu is not excluded)
+  if (/(^|\.)(gov|gouv|gob|gv|mil)(\.[a-z]{2})?$/.test(host)) return 'government';
   if (/^(maps|goo)\.(google|gl)/.test(host) || host.endsWith('maps.app.goo.gl') || host === 'g.page') return 'map';
   if (host.endsWith('business.site')) return 'directory';
   for (const [re, kind] of NON_OFFICIAL) {

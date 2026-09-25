@@ -8,6 +8,10 @@ import { logger } from '../../lib/logger.js';
  * concurrent contexts (BROWSER_POOL_SIZE). Contexts are isolated (no shared cookies/cache)
  * and always closed. The browser is relaunched if it crashes.
  */
+export class BrowserDeadlineError extends Error {
+  override name = 'BrowserDeadlineError';
+}
+
 export class BrowserPool {
   private browser: Browser | null = null;
   private launching: Promise<Browser> | null = null;
@@ -50,20 +54,61 @@ export class BrowserPool {
     return this.launching;
   }
 
-  async withContext<T>(options: BrowserContextOptions, fn: (ctx: BrowserContext) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  /**
+   * Runs `fn` in a fresh context. Hard limits: `deadlineMs` (a page that freezes its main thread
+   * makes Playwright calls such as page.evaluate wait forever) and the abort signal. On either,
+   * the context is closed, which rejects every pending call; if closing itself hangs, the
+   * browser is killed and relaunched on next use.
+   */
+  async withContext<T>(options: BrowserContextOptions, fn: (ctx: BrowserContext) => Promise<T>, signal?: AbortSignal, deadlineMs = 120_000): Promise<T> {
     const release = await this.sem.acquire(signal);
+    let ctx: BrowserContext | null = null;
+    let timer: NodeJS.Timeout | undefined;
+    let onAbort: (() => void) | undefined;
     try {
       const browser = await this.getBrowser();
-      const ctx = await browser.newContext(options);
+      ctx = await browser.newContext(options);
       this.contextsOpened++;
-      try {
-        return await fn(ctx);
-      } finally {
-        await ctx.close().catch(() => undefined);
-      }
+      const work = fn(ctx);
+      work.catch(() => undefined); // may reject after the deadline won the race
+      const limit = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new BrowserDeadlineError(`browser work exceeded ${Math.round(deadlineMs / 1000)}s (page unresponsive?)`)), deadlineMs);
+        onAbort = () => reject(new BrowserDeadlineError('aborted'));
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener('abort', onAbort, { once: true });
+      });
+      return await Promise.race([work, limit]);
     } finally {
+      clearTimeout(timer);
+      if (onAbort) signal?.removeEventListener('abort', onAbort);
+      if (ctx) await this.closeContext(ctx);
       release();
     }
+  }
+
+  private async closeContext(ctx: BrowserContext): Promise<void> {
+    let closeTimer: NodeJS.Timeout | undefined;
+    const closed = await Promise.race([
+      ctx.close().then(() => true, () => true),
+      new Promise<boolean>((r) => {
+        closeTimer = setTimeout(() => r(false), 10_000);
+      }),
+    ]);
+    clearTimeout(closeTimer);
+    if (!closed) {
+      logger('browser-pool').warn('context did not close within 10s; restarting the browser');
+      await this.restart();
+    }
+  }
+
+  /** Kill a wedged browser; the next withContext() launches a fresh one. */
+  private async restart(): Promise<void> {
+    const b = this.browser;
+    this.browser = null;
+    if (!b) return;
+    this.closing = true;
+    await Promise.race([b.close().catch(() => undefined), new Promise((r) => setTimeout(r, 5_000))]);
+    this.closing = false;
   }
 
   async close(): Promise<void> {

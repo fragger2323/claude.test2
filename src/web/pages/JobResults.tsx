@@ -60,6 +60,8 @@ export default function JobResults() {
     queryFn: () => api<{ counts: SearchCounts; rows: ResultRow[] }>(`/api/search-jobs/${id}/results`, { query: { limit: 500 } }),
     refetchInterval: running ? 5000 : false,
   });
+  const health = useQuery({ queryKey: ['health'], queryFn: () => api<{ workers: number }>('/api/health'), refetchInterval: running ? 5000 : false, enabled: running });
+  const noWorker = running && health.data?.workers === 0;
   const control = useMutation({
     mutationFn: (action: 'pause' | 'resume' | 'cancel' | 'retry') => api(`/api/search-jobs/${id}/${action}`, { method: 'POST', body: {} }),
     onSuccess: (_d, a) => {
@@ -128,6 +130,12 @@ export default function JobResults() {
           </>
         }
       />
+      {noWorker && (
+        <div role="alert" className="rounded-lg border border-warn/40 bg-warn-soft px-4 py-3 text-[13px] text-ink">
+          <strong>No worker is running, so this search cannot start.</strong> Start one with <code className="font-mono">npm run start:worker</code> (or set{' '}
+          <code className="font-mono">RUN_WORKER_IN_PROCESS=true</code> for a single-process setup). The job will continue automatically once a worker is up.
+        </div>
+      )}
       {j.error && <ErrorState error={new Error(j.error)} />}
 
       <Panel bodyClassName="p-3">
@@ -156,7 +164,7 @@ export default function JobResults() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Stat label="Found" value={c.found ?? 0} hint="source records" />
         <Stat label="Valid businesses" value={c.valid ?? 0} hint={`${c.duplicatesMerged ?? 0} duplicates merged`} />
-        <Stat label="Websites" value={c.websites ?? 0} hint={`${c.noWebsite ?? 0} without`} />
+        <Stat label="Websites" value={c.websites ?? 0} hint={`${c.noWebsite ?? 0} without${c.websiteUnverified ? ` · ${c.websiteUnverified} not verified` : ''}`} />
         <Stat label="Analyzed" value={c.analyzed ?? 0} hint={c.analysisFailed ? `${c.analysisFailed} unreachable/failed` : 'live'} />
         <Stat label="Very high" value={c.veryHigh ?? 0} tone="accent" />
         <Stat label="High" value={c.high ?? 0} tone="ok" />
@@ -199,7 +207,7 @@ export default function JobResults() {
                             {hostname(r.website)} <ExternalLink className="size-3" />
                           </a>
                         ) : (
-                          <span className="text-ink-3">{r.websiteStatus === 'not_found' ? 'none found' : '—'}</span>
+                          <span className="text-ink-3" title={r.websiteStatus === 'unverified' ? 'No source listed a website and no web search was run' : undefined}>{r.websiteStatus === 'not_found' ? 'none found' : r.websiteStatus === 'unverified' ? 'not verified' : '—'}</span>
                         )}
                       </td>
                       <td className="px-3 py-2">

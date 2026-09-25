@@ -134,6 +134,7 @@ export function buildDecisionIntel(i: DecisionInput): DecisionIntel {
   const bestEmail = i.contacts.find((c) => c.type === 'email' && c.status !== 'unverified');
   if (bestEmail && bestEmail.status === 'probable') whatNotToClaim.push(`Do not assume ${bestEmail.value} is monitored — it comes from a listing, not the website.`);
   if (i.website.status === 'unreachable') whatNotToClaim.push('Do not say the business is closed — only the website was unreachable when checked.');
+  if (i.website.status === 'unverified') whatNotToClaim.push('Do not say they have no website — nobody searched for one yet (no source listed it and web search was not run).');
   if (i.company.discrepancies > 0) whatNotToClaim.push('Sources disagree on some details (see Discrepancies) — confirm before quoting phone/address.');
 
   // Best channel

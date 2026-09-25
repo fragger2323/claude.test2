@@ -353,6 +353,8 @@ export interface SearchCounts {
   excluded: number;
   websites: number;
   noWebsite: number;
+  /** no source listed a website and no web search was run */
+  websiteUnverified: number;
   analyzed: number;
   analysisFailed: number;
   veryHigh: number;
@@ -371,6 +373,7 @@ export function emptyCounts(): SearchCounts {
     excluded: 0,
     websites: 0,
     noWebsite: 0,
+    websiteUnverified: 0,
     analyzed: 0,
     analysisFailed: 0,
     veryHigh: 0,

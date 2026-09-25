@@ -55,6 +55,8 @@ export function tagEvidence(findings: FindingForScoring[], opts: { noWebsite?: b
 
 export interface MatchContext {
   hasWebsite: boolean;
+  /** Website existence not verified: neither "no website" nor any website problem may be assumed. */
+  websiteUnknown?: boolean;
   commercialRelevance: number | null;
   /** services the user never wants recommended (My Business → disallowed project types) */
   disallowed?: string[];
@@ -67,7 +69,8 @@ function evaluateExclusions(rules: ExclusionRule[], evidence: Map<ProblemTag, Ta
   for (const r of rules) {
     switch (r.type) {
       case 'requires_website':
-        if (!ctx.hasWebsite) out.push(r.reason);
+        if (ctx.websiteUnknown) out.push('The website has not been verified yet, so nothing can be said about it.');
+        else if (!ctx.hasWebsite) out.push(r.reason);
         break;
       case 'requires_tag':
         if ((evidence.get(r.tag)?.strength ?? 0) < 0.3) out.push(r.reason);
@@ -138,7 +141,7 @@ export function resolveRequestedService(requested: string | undefined | null, se
 }
 
 export function matchServices(services: ServiceDef[], findings: FindingForScoring[], ctx: MatchContext, requestedService?: string | null): MatchResult {
-  const evidence = tagEvidence(findings, { noWebsite: !ctx.hasWebsite });
+  const evidence = tagEvidence(findings, { noWebsite: !ctx.hasWebsite && !ctx.websiteUnknown });
   const all = services.map((s) => scoreService(s, evidence, ctx));
   const eligible = all
     .filter((m) => m.exclusionReasons.length === 0)

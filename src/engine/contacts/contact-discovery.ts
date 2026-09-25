@@ -62,14 +62,29 @@ function normalizeSocial(url: string): string {
   }
 }
 
+/** Web-agency / hosting credit lines: an address right after these words is not the business's contact. */
+const CREDIT_RE = /(realizacja|wykonanie|projekt(owanie)?\s+(i\s+wykonanie|strony)|strona\s+wykonana|design(ed)?\s+by|created\s+by|developed\s+by|made\s+by|powered\s+by|site\s+by|web\s*design|webdesign|agencja\s+interaktywna|hosting|umsetzung|gestaltung|разработка|розробка|сайт\s+разработан)[^@]{0,80}$/i;
+
+function inCreditLine(text: string, email: string): boolean {
+  const lower = text.toLowerCase();
+  let from = 0;
+  for (;;) {
+    const i = lower.indexOf(email, from);
+    if (i < 0) return false;
+    if (CREDIT_RE.test(lower.slice(Math.max(0, i - 120), i))) return true;
+    from = i + email.length;
+  }
+}
+
 function fromSnapshot(s: PageSnapshot, country: string | null | undefined, observedAt: Date, isContactPage: boolean): ContactObservation[] {
   const out: ContactObservation[] = [];
   const src = 'website';
+  const credit = (e: string) => inCreditLine(`${s.bodyText}\n${s.footerText}`, e);
   for (const href of s.mailtoLinks) {
     const e = emailFromMailto(href);
-    if (e) out.push({ type: 'email', value: e, normalizedValue: e, source: src, sourceUrl: s.url, label: 'mailto link', onOfficialSite: true, observedAt });
+    if (e && !credit(e)) out.push({ type: 'email', value: e, normalizedValue: e, source: src, sourceUrl: s.url, label: 'mailto link', onOfficialSite: true, observedAt });
   }
-  for (const e of extractEmails(s.bodyText)) out.push({ type: 'email', value: e, normalizedValue: e, source: src, sourceUrl: s.url, label: 'visible text', onOfficialSite: true, observedAt });
+  for (const e of extractEmails(s.bodyText)) if (!credit(e)) out.push({ type: 'email', value: e, normalizedValue: e, source: src, sourceUrl: s.url, label: 'visible text', onOfficialSite: true, observedAt });
   for (const e of s.ld.emails) if (isValidEmailSyntax(e.toLowerCase())) out.push({ type: 'email', value: e.toLowerCase(), normalizedValue: e.toLowerCase(), source: src, sourceUrl: s.url, label: 'structured data', onOfficialSite: true, observedAt });
   for (const t of s.telLinks) {
     const p = normalizePhone(t.href.replace(/^tel:/i, ''), country);
@@ -123,6 +138,9 @@ export function contactsFromSources(records: NormalizedBusiness[], country: stri
  *  probable   – reported by one business listing but not seen on the official site.
  *  unverified – weak/conflicting evidence (e.g. e-mail domain has no mail server).
  */
+/** Free mailbox providers: small businesses often use them, so they are not "someone else's" domain. */
+const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'aol.com', 'zoho.com', 'wp.pl', 'o2.pl', 'onet.pl', 'op.pl', 'onet.eu', 'interia.pl', 'interia.eu', 'poczta.fm', 'gazeta.pl', 'tlen.pl', 'vp.pl', 'autograf.pl', 'buziaczek.pl', 'poczta.onet.pl', 'gmx.de', 'gmx.net', 'gmx.at', 'web.de', 't-online.de', 'freenet.de', 'seznam.cz', 'centrum.cz', 'email.cz', 'ukr.net', 'i.ua', 'meta.ua', 'bigmir.net', 'yandex.ru', 'mail.ru', 'libero.it', 'orange.fr', 'free.fr', 'laposte.net']);
+
 export function resolveContacts(obs: ContactObservation[], opts: { officialDomain?: string | null; mx?: Map<string, boolean | null> } = {}): ResolvedContact[] {
   const groups = new Map<string, ContactObservation[]>();
   for (const o of obs) {
@@ -137,7 +155,16 @@ export function resolveContacts(obs: ContactObservation[], opts: { officialDomai
     let status: ContactStatus;
     let confidence: Confidence;
     let note: string | undefined;
-    if (onSite) {
+    const emailDomain = first.type === 'email' ? registrableDomain(first.normalizedValue.split('@')[1] ?? '') : null;
+    // (a site served from a bare IP address has no domain to compare with)
+    const comparable = !!opts.officialDomain && !/^\d{1,3}(\.\d{1,3}){3}$/.test(opts.officialDomain);
+    const foreignDomain = !!emailDomain && comparable && emailDomain !== opts.officialDomain && !FREEMAIL.has(emailDomain);
+    if (onSite && foreignDomain) {
+      // e.g. a partner, a franchisor, the agency or a data-protection officer — not necessarily this business
+      status = 'probable';
+      confidence = 'medium';
+      note = `Shown on the official website, but the address belongs to ${emailDomain}, not ${opts.officialDomain} — confirm it is this business's inbox.`;
+    } else if (onSite) {
       status = 'verified';
       confidence = 'high';
       note = `Published on the official website (${first.sourceUrl ?? 'site'}).`;

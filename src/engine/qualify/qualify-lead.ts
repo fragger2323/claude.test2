@@ -25,7 +25,7 @@ export function advanceStage(current: string, target: CrmStage): CrmStage {
 
 export async function latestAnalysis(websiteId: string) {
   return db().analysis.findFirst({
-    where: { websiteId, status: { in: ['completed', 'partial', 'unreachable', 'robots_disallowed'] } },
+    where: { websiteId, status: { in: ['completed', 'partial', 'unreachable', 'robots_disallowed', 'blocked'] } },
     orderBy: { startedAt: 'desc' },
     include: { findings: true, screenshots: true },
   });
@@ -55,7 +55,7 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
   const lead = await db().lead.findUnique({
     where: { id: leadId },
     include: {
-      company: { include: { website: true, contacts: true, locations: true, sourceRecords: { select: { provider: true, fetchedAt: true, purgedAt: true } } } },
+      company: { include: { website: true, contacts: true, locations: true, sourceRecords: { select: { provider: true, fetchedAt: true, sourceUpdatedAt: true, purgedAt: true } } } },
       outcomes: { select: { type: true } },
     },
   });
@@ -78,18 +78,17 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
     evidence: jsonArray<EvidenceItem>(f.evidence),
   }));
   const scoring: FindingForScoring[] = findings;
-  const websiteStatus = (c.website?.status ?? 'none') as 'found' | 'not_found' | 'unreachable' | 'none';
+  const websiteStatus = (c.website?.status ?? 'none') as 'found' | 'not_found' | 'unreachable' | 'unverified' | 'none';
   const analyzed = !!analysis && ['completed', 'partial'].includes(analysis.status);
   const nicheKey = resolveNiche(c.industry ?? params.niche ?? '').def?.key ?? null;
   const contacts = c.contacts.filter((x) => !x.expiredAt).map((x) => ({ type: x.type, status: x.status, isRoleBased: x.isRoleBased, isPersonal: x.isPersonal, value: x.value, sourceUrl: x.sourceUrl }));
   const activeSources = c.sourceRecords.filter((s) => !s.purgedAt);
+  const sawRealSite = !!analysis && ['completed', 'partial'].includes(analysis.status);
   const freshness = computeFreshness({
-    sourceFetches: c.sourceRecords.map((s) => s.fetchedAt),
-    lastVerifiedAt: c.lastVerifiedAt,
-    analysisAt: analysis?.finishedAt ?? null,
+    sources: c.sourceRecords.map((s) => ({ provider: s.provider, fetchedAt: s.fetchedAt, sourceUpdatedAt: s.sourceUpdatedAt })),
+    liveVerifiedAt: sawRealSite ? (analysis!.finishedAt ?? analysis!.startedAt) : null,
     businessStatus: c.businessStatus,
     discrepancyCount: jsonArray(c.discrepancies).length,
-    providerCount: new Set(c.sourceRecords.map((s) => s.provider)).size,
     websiteStatus: c.website?.status,
   });
   const copyrightYear = (analysis?.tech as { websiteAgeSignal?: { copyrightYear?: number | null } } | null)?.websiteAgeSignal?.copyrightYear ?? null;
@@ -111,7 +110,7 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
     website: { status: websiteStatus, analyzed, analysisStatus: analysis?.status ?? null },
     findings: scoring,
     contacts,
-    freshness,
+    freshness: { score: freshness.label === 'unknown' ? null : freshness.score, factors: freshness.factors },
     nicheKey,
     params,
     profile,
@@ -122,7 +121,7 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
   // Pass 1 (for commercial relevance, used by service exclusion rules).
   const pre = computeLeadFit({ ...baseInput, serviceFit: { score: null, serviceName: null } });
   const commercial = pre.components.find((x) => x.key === 'commercialRelevance')?.score ?? null;
-  const match = matchServices(services, scoring, { hasWebsite: websiteStatus !== 'not_found', commercialRelevance: commercial, disallowed: profile.disallowedProjectTypes, preferredTechnologies: profile.preferredTechnologies }, params.service);
+  const match = matchServices(services, scoring, { hasWebsite: websiteStatus !== 'not_found' && websiteStatus !== 'unverified', websiteUnknown: websiteStatus === 'unverified', commercialRelevance: commercial, disallowed: profile.disallowedProjectTypes, preferredTechnologies: profile.preferredTechnologies }, params.service);
   const svcForFit = match.requested && match.requested.exclusionReasons.length === 0 ? match.requested : match.primary;
   const fit = computeLeadFit({ ...baseInput, serviceFit: { score: svcForFit?.fitScore ?? (match.all.length ? 0 : null), serviceName: svcForFit?.serviceName ?? null } });
   if (match.requested && svcForFit !== match.requested) {

@@ -21,7 +21,7 @@ const DAY = 86_400_000;
 export async function todayOverview(now = new Date()) {
   const endOfDay = new Date(now);
   endOfDay.setHours(23, 59, 59, 999);
-  const leadSelect = { id: true, stage: true, priority: true, leadFit: true, mainOpportunity: true, primaryServiceSlug: true, contactAvailability: true, stageChangedAt: true, createdAt: true, company: { select: { name: true, city: true, industry: true, website: { select: { url: true } } } } } as const;
+  const leadSelect = { id: true, stage: true, priority: true, leadFit: true, mainOpportunity: true, primaryServiceSlug: true, contactAvailability: true, stageChangedAt: true, createdAt: true, company: { select: { name: true, city: true, industry: true, website: { select: { url: true, status: true } } } } } as const;
 
   const [newBest, followUps, replies, meetings, proposals, wonOutcomes, review] = await Promise.all([
     db().lead.findMany({

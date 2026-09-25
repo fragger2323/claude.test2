@@ -66,7 +66,7 @@ as follows. A score of ≥ 0.8 merges:
 | Evidence | Score |
 |---|---|
 | Same official website domain | 0.90 |
-| Same valid phone, plus a similar name (≥ 0.6), < 250 m apart, or the same address | 0.88 |
+| Same valid phone, plus a similar *distinctive* name (≥ 0.6), < 250 m apart, or the same address | 0.88 |
 | E-mail domain matches the other's website or e-mail domain, with name similarity ≥ 0.5 | 0.80 |
 | Name similarity ≥ 0.90 and < 150 m apart | 0.85 |
 | Name similarity ≥ 0.85 and same street address | 0.85 |
@@ -74,8 +74,13 @@ as follows. A score of ≥ 0.8 merges:
 | Generic name (e.g. "Dental Clinic"): only ≥ 0.95 plus identical address plus < 60 m | 0.80 |
 
 Hard blocks: **two different official domains**, different cities (unless the score is at least
-0.9), more than 2 km apart without website or phone evidence, and a phone shared by three or more
-clearly different names (a call centre or booking line). A union that would put two different
+0.9), **more than 2 km apart unless both have the same official domain** (a shared phone is not
+enough), and a phone shared by three or more clearly different names (a call centre or booking
+line). Name similarity is computed on the *distinctive* words only: industry words such as
+"Centrum Implantologii" or "Gabinet Stomatologiczny" are ignored, so "Centrum Implantologii
+Wiśniewska" and "Centrum Implantologii Nowakowski" are not treated as similar. The 100-lead scale
+run found exactly that case (a shared phone merged two clinics 9.5 km apart); it is now a
+regression test. A union that would put two different
 domains or two existing companies into one cluster is refused. Names are normalised first:
 diacritics removed, legal forms (`sp. z o.o.`, `GmbH`, `s.r.o.`, `LLC`, …) stripped, then
 compared with Jaro-Winkler plus token-set similarity.
@@ -88,12 +93,20 @@ Needs review. Conflicts are never resolved silently.
 
 ## 4. Verifying: status, freshness, exclusions
 
-- **Freshness** (`src/engine/freshness/freshness.ts`). The newest dated signal (source fetch,
-  website verification or analysis) gives a base score: ≤ 7 days 100, ≤ 30 days 80, ≤ 90 days
-  55, ≤ 180 days 35, older 15. Two or more independent sources add 10. A source reporting the
-  business as temporarily closed subtracts 30; permanently closed sets the score to 0. Each
-  conflict subtracts 5 (at most 20). Labels: fresh ≥ 85, recent ≥ 65, aging ≥ 40, stale.
-  `first_seen`, `last_seen`, `last_verified`, source and source timestamp are stored per company.
+- **Freshness** (`src/engine/freshness/freshness.ts`). The time *we* fetched a record says
+  nothing about how current it is: an OpenStreetMap entry fetched today may not have been edited
+  in eight years. Only three signals count, and the strongest one sets the base score (≤ 7 days
+  100, ≤ 30 days 80, ≤ 90 days 55, ≤ 180 days 35, ≤ 1 year 25, older 15):
+  1. **a live check of the real website** by the analyser;
+  2. **a listing in a source that maintains open/closed status** (Google, Foursquare, Yelp), capped
+     at 85 because "listed" is weaker than "seen";
+  3. **the source's own last-edit date** when it gives one (OSM element timestamp, stored as
+     `SourceRecord.sourceUpdatedAt`).
+  Undated data (OSM without a timestamp, imports) is shown as "age unknown" and counts as a gap,
+  not as zero. Two or more independent sources add 10. A source reporting the business as
+  temporarily closed subtracts 30; permanently closed sets the score to 0. Each conflict
+  subtracts 5 (at most 20). Labels: fresh ≥ 85, recent ≥ 65, aging ≥ 40, stale. The company's
+  `lastVerifiedAt` is set only by a live website check or a maintained source's listing.
 - **An unreachable website is not a closed business.** It is recorded as an observation only.
 - **Exclusions** are kept with their reason, never silently dropped: permanently closed, your
   existing clients, previously contacted, excluded industries, do-not-contact, and "website
@@ -116,8 +129,19 @@ Needs review. Conflicts are never resolved silently.
    construction" pages are rejected.
 5. **Decision.** Accept if `0.5·prior + 0.5·verification` is at least 0.3. A candidate found only
    by search needs 0.45 and on-page evidence of at least 0.4. If a listed site cannot be reached,
-   the result is `unreachable`, not "no website". Otherwise the result is **"No official website
-   found"**, together with the full log of what was checked and why each candidate was rejected.
+   the result is `unreachable`, not "no website". The remaining outcomes are kept apart:
+   - **`not_found` — "No official website found"**: web search ran and found nothing, or a source
+     lists only a social/directory profile as the business's web address;
+   - **`unverified` — "Website not verified"**: no source listed a site *and* no independent web
+     search was run (not configured, or the job's search budget was used up). Nothing is pitched
+     for these leads; Website Need is a gap and priority is "insufficient data". Add the site on
+     the lead (*Add website*, which then analyses it live) or configure Brave/Google search.
+   Both come with the full log of what was checked and why each candidate was rejected.
+6. **Web search as a source** only accepts results that look like a business homepage (URL depth
+   ≤ 1, not a blog/ranking/listing path) with a title that is not a listing ("Top 10 …",
+   "238 gabinetów, opinie", "Best dentists in …"). News sites, classifieds, job boards, deal
+   sites, government portals and directories (including keyword domains such as `cylex-polska.pl`,
+   `baza-firm.com.pl`) are rejected as websites.
 
 ## 6. Analysing: live website analysis
 
@@ -126,7 +150,18 @@ promising ~1.5 × quantity sites are analysed; analyses newer than `REANALYZE_AF
 reused.
 
 - **HTTP checks**: HTTPS, the HTTP→HTTPS redirect, the redirect chain, headers (HSTS,
-  compression), `robots.txt` (honoured), sitemap, soft-404, homepage status.
+  compression), `robots.txt` (honoured), sitemap, soft-404, homepage status. HTTPS counts as
+  available when the TLS connection produced any HTTP response; a timeout is "unknown", never
+  "HTTPS missing".
+- **Blocked sites.** A bot-protection or challenge page (HTTP 401/403/429, Cloudflare "Just a
+  moment…", captcha walls, WAF blocks) is recorded as status `blocked`: no findings, no AI
+  observations, no "last verified". It is never bypassed. Error pages (other 4xx/5xx) are
+  `unreachable`.
+- **Time bounds.** Every `page.evaluate` has a timeout (a page that freezes its main thread is
+  abandoned after ~30 s and the remaining viewports are skipped); each browser run has a hard
+  deadline, after which the context is force-closed and, if needed, the browser restarted; the
+  whole site has a budget (`ANALYSIS_SITE_BUDGET_MS`, 180 s) after which results are partial.
+  Tested with hostile pages (frozen main thread, never-ending response, redirect loop, challenge).
 - **Real Chromium**, one isolated context per viewport: desktop 1440×900, tablet 820×1180,
   mobile 390×844 @2x. Viewport and full-page screenshots are taken at each size. The mobile run
   tests the menu toggle; the desktop run tests keyboard focus visibility. Up to
@@ -161,9 +196,13 @@ sources' listed phone, e-mail and socials.
 
 | Status | Rule |
 |---|---|
-| verified | published on the official website, or the same phone from two or more independent sources |
-| probable | from one business listing, not seen on the website |
+| verified | published on the official website (on the site's own domain or a free-mail domain), or the same phone from two or more independent sources |
+| probable | from one business listing, not seen on the website; or shown on the website but on **another organisation's domain** (partner, franchisor, data-protection officer) |
 | unverified | only from web search, or the e-mail domain has no MX record |
+
+Addresses in a web-agency or hosting credit line ("Realizacja strony: …", "Designed by …") are
+ignored. Phone numbers are recognised only when they are valid numbers for the country, so years
+("© 2016 – 2024"), tax IDs (NIP/KRS) and bank accounts are never taken for phones.
 
 Never done: guessing addresses (`firstname@domain`), de-obfuscating addresses the owner
 deliberately hid, or SMTP mailbox probing. Role addresses (`info@`, `recepcja@`) are
@@ -172,7 +211,10 @@ preferred; addresses that look personal are flagged so you can handle them with 
 ## 8. Qualifying and reporting
 
 These stages cover service matching, Lead Fit, priority, sales potential, decision intelligence
-and portfolio matching; see [lead-scoring.md](lead-scoring.md). If requested, the reporting
+and portfolio matching; see [lead-scoring.md](lead-scoring.md). Scoring is **progressive**: when
+analysis starts, every lead gets a provisional score from what is already known (source
+contacts, website status), and each lead is re-scored the moment its website analysis finishes,
+so ranked and contact-ready leads appear while the job is still running. If requested, the reporting
 stage drafts audits for the top leads, using templates only (AI only on demand).
 
 ## Results

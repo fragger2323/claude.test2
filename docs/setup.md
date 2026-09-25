@@ -66,6 +66,7 @@ Every value is validated at startup (`src/config/env.ts`). Placeholder-looking s
 | `ANALYSIS_CONCURRENCY` | `2` | websites analysed in parallel per job |
 | `ANALYSIS_MAX_PAGES` | `4` | homepage plus up to N−1 internal pages (contact, services, about, pricing) |
 | `ANALYSIS_TIMEOUT_MS` | `45000` | per page load |
+| `ANALYSIS_SITE_BUDGET_MS` | `180000` | hard budget for one website (all viewports, pages, link checks); results are marked partial after it. A page that freezes its main thread is abandoned after ~30 s. |
 | `REANALYZE_AFTER_DAYS` | `14` | fresher analyses are reused (incremental) |
 | `RESPECT_ROBOTS_TXT` | `true` | |
 | `EMAIL_MX_CHECK` | `true` | DNS MX lookup for published e-mail domains. Mailboxes are never probed. |
@@ -116,6 +117,9 @@ environment with the UI for manual exploration.
 
 | Symptom | Cause / fix |
 |---|---|
+| Search stays "queued" | No worker is running. The job page says so. Start `npm run start:worker`, or set `RUN_WORKER_IN_PROCESS=true` (`npm run dev` does this). |
+| Many leads show "Website not verified" | No source listed a website and web search is not configured. Add the site on the lead (*Add website*), or configure Brave/Google search. |
+| Leads show "blocked" analysis | The site shows bot protection to automated visitors; it is not bypassed. Check it yourself. |
 | Search finds 0 companies | No source is configured or enabled (Settings → Sources), or every provider failed. The job page shows provider status and errors; the strategy log explains the queries. |
 | "Website not analysed" on many leads | Cost control: only the most promising ~1.5 × requested quantity are analysed. Use **Analyze** on the lead. |
 | Analysis fails with a browser error | Chromium is not installed: `npx playwright install --with-deps chromium`. |

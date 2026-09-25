@@ -11,7 +11,7 @@ Three things cost money or machine time: **paid place/search APIs**, **AI tokens
 | Discovering | one call per query per text source (Google Places may page: up to 3 pages of 20) | stops at 3 × quantity unique records; **`MAX_PROVIDER_CALLS_PER_JOB`** (default 300) hard cap; cache |
 | OSM | one Overpass call per niche and area, not per query | structured mode; 3-day POI cache, 30-day geocoding cache |
 | Website discovery | web search **only** when no source lists a usable website | cached 3 days |
-| Analysis | Chromium time: 3 viewports + up to `ANALYSIS_MAX_PAGES − 1` internal pages + link checks | only the most promising **1.5 × quantity** sites; results newer than **`REANALYZE_AFTER_DAYS`** (14) are reused |
+| Analysis | Chromium time: 3 viewports + up to `ANALYSIS_MAX_PAGES − 1` internal pages + link checks | only the most promising **1.5 × quantity** sites; results newer than **`REANALYZE_AFTER_DAYS`** (14) are reused; hard cap per site `ANALYSIS_SITE_BUDGET_MS` (180 s); frozen pages abandoned after ~30 s |
 | AI visual observations (optional) | one multimodal call per analysed site | `AI_VISUAL_ANALYSIS`, a per-search toggle, cache, monthly budget |
 | Audits / outreach | free (templates) | AI only when you click "with AI" |
 

@@ -25,6 +25,8 @@ interface OverpassElement {
   lon?: number;
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
+  /** last edit (from `out meta`); the contributor fields that come with it are ignored */
+  timestamp?: string;
 }
 
 const CATEGORY_KEYS = ['amenity', 'shop', 'office', 'craft', 'healthcare', 'tourism', 'leisure'];
@@ -71,6 +73,7 @@ export function normalizeOsmElement(el: OverpassElement, fetchedAt = new Date())
     businessStatus: disused ? 'closed_permanently' : 'unknown',
     raw: { opening_hours: t.opening_hours, operator: t.operator, brand: t.brand },
     fetchedAt,
+    sourceUpdatedAt: el.timestamp && Number.isFinite(Date.parse(el.timestamp)) ? new Date(el.timestamp) : undefined,
   };
 }
 
@@ -98,7 +101,8 @@ export function buildOverpassQuery(q: { nicheKey?: string; term: string; area: G
     const rx = escapeOverpassRegex(q.term).slice(0, 60);
     for (const k of ['shop', 'office', 'amenity', 'craft', 'healthcare']) clauses.push(`nwr["name"~"${rx}",i]["${k}"]${filter};`);
   }
-  return `[out:json][timeout:60];${header}(${clauses.join('')});out center tags ${Math.max(1, Math.min(2000, q.limit))};`;
+  // `meta` adds the last-edit timestamp (freshness); contributor names in it are never stored.
+  return `[out:json][timeout:60];${header}(${clauses.join('')});out center meta ${Math.max(1, Math.min(2000, q.limit))};`;
 }
 
 export class OsmAdapter implements LeadSourceAdapter, GeoProvider {

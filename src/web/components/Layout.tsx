@@ -39,6 +39,18 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: Settings, key: 's' },
 ];
 
+/** Neutral mark: a crosshair on a dark tile (finding the right clients), not an "AI" badge. */
+function BrandMark() {
+  return (
+    <div className="grid size-6 place-items-center rounded-md bg-ink text-panel" aria-hidden="true">
+      <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <circle cx="8" cy="8" r="4.5" />
+        <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
+      </svg>
+    </div>
+  );
+}
+
 export function useTheme(): [boolean, () => void] {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   const toggle = useCallback(() => {
@@ -240,7 +252,7 @@ export function Layout({ children, user, onLogout }: { children: ReactNode; user
     <div className="flex h-full">
       <aside className="hidden w-[212px] shrink-0 flex-col border-r border-line bg-panel md:flex">
         <div className="flex items-center gap-2 px-4 py-3.5">
-          <div className="grid size-6 place-items-center rounded-md bg-ink text-[11px] font-bold text-panel">AI</div>
+          <BrandMark />
           <div className="leading-tight">
             <div className="text-[13px] font-semibold">Agency Intelligence</div>
             <div className="text-[10px] uppercase tracking-wider text-ink-3">Business OS</div>
@@ -286,7 +298,7 @@ export function Layout({ children, user, onLogout }: { children: ReactNode; user
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-2 md:hidden">
-          <div className="grid size-6 place-items-center rounded-md bg-ink text-[11px] font-bold text-panel">AI</div>
+          <BrandMark />
           <select aria-label="Navigate" className="flex-1 rounded-md border border-line bg-panel px-2 py-1 text-[13px]" value={NAV.find((n) => location.pathname.startsWith(n.to))?.to ?? ''} onChange={(e) => navigate(e.target.value)}>
             {NAV.map((n) => (
               <option key={n.to} value={n.to}>

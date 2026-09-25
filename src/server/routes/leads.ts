@@ -17,7 +17,8 @@ import { toCsv } from '../../lib/csv.js';
 import { jsonArray } from '../../lib/misc.js';
 import { normalizePhone } from '../../lib/phone.js';
 import { normalizeName } from '../../lib/text.js';
-import { normalizeUrl } from '../../lib/url.js';
+import { classifyNonOfficialDomain, normalizeUrl } from '../../lib/url.js';
+import { domainKey } from '../../engine/resolution/entity-resolution.js';
 import { buildProviderRegistry } from '../../providers/registry.js';
 import { browserPool } from '../../providers/website/browser-pool.js';
 import { assertId, HttpProblem, notFound, parseBody, reqLog } from '../validation.js';
@@ -30,7 +31,7 @@ const listQuery = z.object({
   industry: z.string().max(100).optional(),
   city: z.string().max(100).optional(),
   service: z.string().max(100).optional(),
-  websiteStatus: z.enum(['found', 'not_found', 'unreachable']).optional(),
+  websiteStatus: z.enum(['found', 'not_found', 'unreachable', 'unverified']).optional(),
   contact: z.enum(['email', 'form', 'phone', 'social', 'none', 'any']).optional(),
   source: z.string().max(40).optional(),
   campaignId: z.string().max(40).optional(),
@@ -187,11 +188,30 @@ export function registerLeadRoutes(app: FastifyInstance): void {
         notes: z.string().max(10_000).nullable().optional(),
         doNotContact: z.boolean().optional(),
         isExistingClient: z.boolean().optional(),
+        /** The official website, entered by you (e.g. when no source listed one). */
+        website: z.string().trim().min(4).max(300).optional(),
       }),
       req.body,
     );
-    const lead = await db().lead.findUnique({ where: { id } });
+    const lead = await db().lead.findUnique({ where: { id }, include: { company: { include: { website: true } } } });
     if (!lead) notFound('Lead');
+    if (body.website !== undefined) {
+      const url = normalizeUrl(body.website);
+      if (!url) throw new HttpProblem(400, 'invalid_url', 'Enter a website address such as https://example.pl');
+      const kind = classifyNonOfficialDomain(url);
+      if (kind) throw new HttpProblem(400, 'not_official_website', `That address is a ${kind.replace('_', ' ')} page, not the business's own website.`);
+      const domain = domainKey(url);
+      const entry = { url, source: 'manual', evidence: 'entered by you', verdict: 'accepted', score: 1, reasons: ['entered manually'] };
+      const data = { url: new URL(url).origin, domain, finalUrl: null, status: 'found', confidence: 'high', discoverySource: 'manual', notFoundReason: null, httpStatus: null, lastCheckedAt: new Date() };
+      await db().website.upsert({
+        where: { companyId: lead.companyId },
+        create: { companyId: lead.companyId, ...data, discoveryLog: [entry] },
+        update: { ...data, discoveryLog: [...jsonArray<Prisma.InputJsonValue>(lead.company.website?.discoveryLog), entry] },
+      });
+      if (domain) await db().company.update({ where: { id: lead.companyId }, data: { primaryDomain: domain } });
+      await db().activity.create({ data: { leadId: id, type: 'note', summary: `Website set manually: ${url}` } });
+      await enqueueJob('analyze_lead', { leadId: id }, { priority: 2 });
+    }
     if (body.stage) await setStage(id, body.stage);
     if (body.notes !== undefined) await db().lead.update({ where: { id }, data: { notes: body.notes } });
     if (body.doNotContact !== undefined || body.isExistingClient !== undefined) {

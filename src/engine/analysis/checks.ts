@@ -1,3 +1,4 @@
+import { findPhonesInText } from '../../lib/phone.js';
 import type { EvidenceItem, FindingDraft, ProblemTag, Viewport } from '../../domain/types.js';
 import type { AnalyzerRaw, PageSnapshot, ViewportRun } from '../../providers/website/types.js';
 
@@ -25,6 +26,8 @@ function run(raw: AnalyzerRaw, vp: Viewport): ViewportRun | undefined {
 
 export interface CheckContext {
   now?: Date;
+  /** Country of the business (phone-number parsing). */
+  country?: string | null;
 }
 
 // ───────────────────────── technical ─────────────────────────
@@ -34,7 +37,9 @@ export function technicalFindings(raw: AnalyzerRaw): FindingDraft[] {
   const h = raw.http;
   const home = raw.finalUrl ?? raw.url;
 
-  if (!h.httpsOk && h.homepageStatus != null) {
+  // Only a real transport failure proves HTTPS is missing; a timeout proves nothing.
+  const httpsProvenMissing = !h.httpsOk && h.httpsErrorCode !== 'timeout' && h.httpsErrorCode !== 'aborted' && !!h.finalUrl?.startsWith('http://') && h.homepageStatus != null;
+  if (httpsProvenMissing) {
     out.push({
       code: 'tech.https_missing',
       category: 'security',
@@ -469,7 +474,7 @@ export function accessibilityFindings(raw: AnalyzerRaw): FindingDraft[] {
 const CONTACT_LINK_RE = /(contact|kontakt|контакт|kontakty|contacto|contatti|nous-contacter)/i;
 const SERVICE_LINK_RE = /(services|service|usług|uslug|oferta|offer|leistungen|услуги|послуги|služby|servicios|servizi|zabieg|treatments?|cennik|pricing)/i;
 
-export function uxFindings(raw: AnalyzerRaw): FindingDraft[] {
+export function uxFindings(raw: AnalyzerRaw, ctx: CheckContext = {}): FindingDraft[] {
   const out: Draft[] = [];
   const d = run(raw, 'desktop')?.snapshot;
   const m = run(raw, 'mobile')?.snapshot;
@@ -503,9 +508,10 @@ export function uxFindings(raw: AnalyzerRaw): FindingDraft[] {
     out.push({ code: 'ux.contact_not_in_nav', category: 'ux', polarity: 'negative', severity: anyContactLink ? 'low' : 'medium', title: 'Contact is not reachable from the main navigation', detail: anyContactLink ? 'A contact link exists (e.g. in the footer) but neither the header nor the navigation contains a contact link or phone number.' : 'No contact page link and no phone number were found in the header or navigation.', evidence: [shot('desktop')], pageUrl: url, confidence: 'high', problemTags: ['contact_path', 'conversion_path'] });
   }
   if (m) {
-    const textHasPhone = /(\+?\d[\d\s\-()]{7,}\d)/.test(m.bodyText.slice(0, 20000));
-    if (textHasPhone && m.telLinks.length === 0) {
-      out.push({ code: 'ux.no_click_to_call', category: 'ux', polarity: 'negative', severity: 'medium', title: 'Phone number is not tappable on mobile', detail: 'A phone number appears as text, but there is no tel: link, so mobile visitors cannot call with one tap.', evidence: [shot('mobile')], pageUrl: url, viewport: 'mobile', confidence: 'medium', problemTags: ['contact_path', 'mobile_experience'] });
+    // Validated phone numbers only — years ("2016 - 2024"), tax IDs and bank accounts are not phones.
+    const phoneInText = findPhonesInText(m.bodyText.slice(0, 20000), ctx.country ?? undefined)[0];
+    if (phoneInText && m.telLinks.length === 0) {
+      out.push({ code: 'ux.no_click_to_call', category: 'ux', polarity: 'negative', severity: 'medium', title: 'Phone number is not tappable on mobile', detail: `The phone number ${phoneInText.international} appears as text, but there is no tel: link, so mobile visitors cannot call with one tap.`, evidence: [shot('mobile'), { type: 'text', excerpt: phoneInText.international }], pageUrl: url, viewport: 'mobile', confidence: 'high', problemTags: ['contact_path', 'mobile_experience'] });
     } else if (m.telLinks.length > 0) {
       out.push({ code: 'ux.click_to_call_ok', category: 'contact', polarity: 'positive', severity: 'info', title: 'Click-to-call available on mobile', detail: `${m.telLinks.length} tel: link(s) found.`, evidence: [{ type: 'html', excerpt: m.telLinks[0]!.href }], pageUrl: url, confidence: 'high', problemTags: [] });
     }
@@ -635,6 +641,8 @@ export function platformFinding(raw: AnalyzerRaw): FindingDraft[] {
 
 /** All deterministic findings for one analysis. */
 export function buildFindings(raw: AnalyzerRaw, ctx: CheckContext = {}): FindingDraft[] {
+  // We did not see the real site (bot protection / nothing loaded): conclude nothing about it.
+  if (raw.status === 'blocked' || raw.status === 'failed') return [];
   if (raw.status === 'unreachable' || raw.status === 'robots_disallowed') return technicalFindings(raw);
   return [
     ...technicalFindings(raw),
@@ -642,7 +650,7 @@ export function buildFindings(raw: AnalyzerRaw, ctx: CheckContext = {}): Finding
     ...performanceFindings(raw),
     ...seoFindings(raw),
     ...accessibilityFindings(raw),
-    ...uxFindings(raw),
+    ...uxFindings(raw, ctx),
     ...visualSignalFindings(raw, ctx),
     ...platformFinding(raw),
   ];

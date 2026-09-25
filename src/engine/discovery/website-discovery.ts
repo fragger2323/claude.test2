@@ -2,6 +2,7 @@ import type { Confidence } from '../../domain/types.js';
 import { normalizePhone } from '../../lib/phone.js';
 import { domainMatchesName, nameTokens, normalizeAddress, stripDiacritics } from '../../lib/text.js';
 import { classifyNonOfficialDomain, isFreeHostingSubdomain, normalizeUrl, registrableDomain } from '../../lib/url.js';
+import { looksLikeChallenge } from '../../providers/website/challenge.js';
 import type { FetchedPage } from '../../providers/website/fetcher.js';
 import type { WebsiteCandidate } from '../../providers/types.js';
 
@@ -21,7 +22,8 @@ export interface CandidateVerdict {
 }
 
 export interface WebsiteDecision {
-  status: 'found' | 'not_found' | 'unreachable';
+  /** unverified = no source lists a site and no independent web search was run: existence unknown. */
+  status: 'found' | 'not_found' | 'unreachable' | 'unverified';
   url: string | null;
   domain: string | null;
   finalUrl: string | null;
@@ -56,6 +58,11 @@ export interface VerifyResult {
 /** Evidence that a fetched homepage belongs to the company. */
 export function verifyHomepage(page: FetchedPage, company: DiscoveryCompany): VerifyResult {
   const reasons: string[] = [];
+  if (!page.ok && page.status != null && ([401, 403, 429].includes(page.status) || (page.status === 503 && looksLikeChallenge(page.title, page.html, 503)))) {
+    // The server answered but refused an automated visitor (bot protection / WAF): the site exists,
+    // we just cannot read it. Never "unreachable", never bypassed.
+    return { score: 0, reasons: [`site answered HTTP ${page.status} to an automated visit (bot protection?) — content not verified`], reachable: true, parked: false, finalUrl: page.finalUrl, status: page.status };
+  }
   if (!page.ok) {
     return { score: 0, reasons: [page.error ? `unreachable: ${page.error}` : `HTTP ${page.status}`], reachable: false, parked: false, status: page.status };
   }
@@ -204,6 +211,24 @@ export async function discoverWebsite(company: DiscoveryCompany, sourceCandidate
   }
   const checked = [...checkedSources];
   const rejected = log.filter((l) => l.verdict === 'rejected').length;
+  const searched = checkedSources.has('web_search');
+  // A source that lists a social/directory profile as the business's web address is evidence the
+  // business has no own site. With no candidate at all and no web search, we simply do not know.
+  const profileListed = log.some((l) => l.verdict === 'rejected' && l.source !== 'web_search' && /profile/.test(l.reasons.join(' ')));
+  if (!searched && !profileListed) {
+    return {
+      status: 'unverified',
+      url: null,
+      domain: null,
+      finalUrl: null,
+      confidence: 'low',
+      source: null,
+      httpStatus: null,
+      log,
+      notFoundReason: `Website not verified: no data source lists a website for this business and no independent web search was run (${deps.searchAvailable ? 'search budget for this job reached' : 'web search is not configured'}). It may still have one — add it on the lead, or configure Brave/Google search.`,
+      checkedSources: checked,
+    };
+  }
   const reason = [
     `No official website found.`,
     checked.length ? `Checked: ${checked.join(', ')}.` : 'No source listed a website.',

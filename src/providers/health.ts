@@ -39,7 +39,11 @@ export interface CallOutcome {
   error?: string;
 }
 
-export async function recordProviderCall(id: string, outcome: CallOutcome): Promise<void> {
+/**
+ * Records one provider *request* outcome (after the HTTP layer's own retries) for the circuit
+ * breaker and health stats. Billing-relevant attempts are counted separately via recordUsage.
+ */
+export async function recordProviderCall(id: string, outcome: CallOutcome, opts: { usage?: boolean } = {}): Promise<void> {
   const s = get(id);
   const authFailure = outcome.status === 401 || outcome.status === 403;
   if (outcome.ok) {
@@ -86,7 +90,7 @@ export async function recordProviderCall(id: string, outcome: CallOutcome): Prom
         circuitOpenUntil: s.openUntil ? new Date(s.openUntil) : null,
       },
     });
-    await recordUsage(id, { calls: 1, failures: outcome.ok ? 0 : 1 });
+    if (opts.usage !== false) await recordUsage(id, { calls: 1, failures: outcome.ok ? 0 : 1 });
   } catch (e) {
     logger('provider-health').warn({ provider: id, err: (e as Error).message }, 'failed to persist provider health');
   }

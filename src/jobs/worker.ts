@@ -14,11 +14,20 @@ import { schedulerTick } from './scheduler.js';
  * Worker process: claims jobs from the DB queue with bounded concurrency, heartbeats leases,
  * retries failures with backoff, runs the scheduler, and shuts down gracefully.
  */
+export const WORKER_HEARTBEAT_MS = 15_000;
+
+/** Workers seen within this window count as alive. */
+export async function liveWorkers(): Promise<number> {
+  const since = new Date(Date.now() - WORKER_HEARTBEAT_MS * 4);
+  return db().setting.count({ where: { key: { startsWith: 'worker:' }, updatedAt: { gte: since } } });
+}
+
 export class Worker {
   private running = false;
   private active = 0;
   private readonly log = logger('worker');
   private stopRequested = false;
+  private beatTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly concurrency = loadConfig().WORKER_CONCURRENCY,
@@ -32,8 +41,18 @@ export class Worker {
     this.log.info({ workerId: WORKER_ID, concurrency: this.concurrency }, 'worker started');
     const requeued = await requeueStaleJobs();
     if (requeued) this.log.warn({ requeued }, 'requeued stale jobs from a previous run');
+    await this.beat();
+    this.beatTimer = setInterval(() => void this.beat(), WORKER_HEARTBEAT_MS);
     void this.loop();
     if (cfg.SCHEDULER_ENABLED) void this.schedulerLoop();
+  }
+
+  /** Liveness record so the API/UI can tell "queued" from "no worker is running". */
+  private async beat(): Promise<void> {
+    const value = { at: new Date().toISOString(), active: this.active, concurrency: this.concurrency, pid: process.pid };
+    await db()
+      .setting.upsert({ where: { key: `worker:${WORKER_ID}` }, create: { key: `worker:${WORKER_ID}`, value }, update: { value } })
+      .catch((e) => this.log.warn({ error: errorMessage(e) }, 'worker heartbeat failed'));
   }
 
   private async schedulerLoop(): Promise<void> {
@@ -101,8 +120,10 @@ export class Worker {
 
   async stop(): Promise<void> {
     this.stopRequested = true;
+    clearInterval(this.beatTimer);
     const deadline = Date.now() + 30_000;
     while (this.active > 0 && Date.now() < deadline) await sleep(200);
+    await db().setting.delete({ where: { key: `worker:${WORKER_ID}` } }).catch(() => undefined);
     await closeBrowserPool();
   }
 

@@ -43,20 +43,23 @@ export async function callProviderJson<T>(
   }
   ctx.budget.consume(1);
   const { cache, ...httpOpts } = opts;
+  const started = Date.now();
   const res = await httpRequest(url, {
     ...httpOpts,
     provider: providerId,
     signal: ctx.signal,
     limiter: limiterFor(providerId, ratePerSec),
-    onAttempt: (a) => {
-      void recordProviderCall(providerId, { ok: a.ok, latencyMs: a.latencyMs, status: a.status, error: a.error ?? (a.ok ? undefined : `HTTP ${a.status}`) });
-    },
-  }).catch((e: unknown) => {
+    // every attempt is a billable call; the circuit breaker only sees the request's final outcome
+    onAttempt: (a) => void recordUsage(providerId, { calls: 1, failures: a.ok ? 0 : 1 }).catch(() => undefined),
+  }).catch(async (e: unknown) => {
     if (e instanceof HttpError) {
       ctx.log.warn({ provider: providerId, status: e.status, code: e.code, error: e.message, jobId: ctx.jobId }, 'provider request failed');
+      // a cancelled job is not a provider failure
+      if (e.code !== 'aborted') await recordProviderCall(providerId, { ok: false, latencyMs: Date.now() - started, status: e.status, error: e.message }, { usage: false });
     }
     throw e;
   });
+  await recordProviderCall(providerId, { ok: true, latencyMs: res.latencyMs, status: res.status }, { usage: false });
   let data: T;
   try {
     data = res.json<T>();

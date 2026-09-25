@@ -165,6 +165,10 @@ export interface ViewportRun {
   badResponses: Array<{ url: string; status: number; type: string }>;
   network: NetworkEntry[];
   blockedRequests: string[];
+  /** Bot-protection / challenge page instead of the site. */
+  blocked?: boolean;
+  /** The page stopped responding (main thread busy) or hit the hard deadline. */
+  unresponsive?: boolean;
   mobileMenu?: { toggleFound: boolean; linksBefore: number; linksAfter: number | null; error?: string };
   focusStops?: FocusStop[];
   durationMs: number;
@@ -185,6 +189,8 @@ export interface HttpChecks {
   inputUrl: string;
   httpsOk: boolean;
   httpsError?: string;
+  /** timeout/aborted = unknown, not proof that HTTPS is missing */
+  httpsErrorCode?: string;
   httpRedirectsToHttps: boolean | null;
   redirectChain: Array<{ url: string; status: number }>;
   homepageStatus: number | null;
@@ -196,6 +202,8 @@ export interface HttpChecks {
   robots: { found: boolean; disallowAll: boolean; sitemaps: string[] };
   sitemap: { found: boolean; url: string | null; urlCount: number | null };
   soft404: boolean | null;
+  /** The homepage response looks like a bot-protection / challenge page. */
+  challenge: boolean;
   lastModified: string | null;
 }
 
@@ -212,7 +220,7 @@ export interface LinkCheck {
 export interface AnalyzerRaw {
   url: string;
   finalUrl: string | null;
-  status: 'completed' | 'partial' | 'unreachable' | 'robots_disallowed' | 'failed';
+  status: 'completed' | 'partial' | 'unreachable' | 'robots_disallowed' | 'blocked' | 'failed';
   runs: Partial<Record<Viewport, ViewportRun>>;
   pages: PageVisit[];
   http: HttpChecks;

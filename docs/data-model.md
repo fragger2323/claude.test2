@@ -35,7 +35,7 @@ Source · ProviderUsage · CacheEntry · SecretSetting · Setting · User · Ses
 | `SearchJob` | one search run (the stage machine) | `params` (validated search params), `status`, `stage`, `control` (`run`/`pause`/`cancel`), `trigger` (`manual`/`scheduled`/`import`), `progress`, `counts`, `sourcesUsed` (per-provider status/calls/records/errors), `strategyLog` |
 | `SearchQuery` | each planned query | `text`, `term`, `language`, `segment`, `strategy`, `template` (key for the quality loop), `resultsCount`, `newRecordsCount`, `error` |
 | `QueryHit` | which query found which record, and at what rank | unique (`searchQueryId`, `sourceRecordId`, `provider`) |
-| `SourceRecord` | one normalised record from one provider | unique (`provider`, `providerRecordId`); `companyId`; name, address, phone, `website` (only if the provider asserts it is official), `profileUrl`, status, rating; `payload` (selected raw attributes); `fetchedAt`, `firstSeenAt`, `lastSeenAt`; `retentionExpiresAt`, `purgedAt` |
+| `SourceRecord` | one normalised record from one provider | unique (`provider`, `providerRecordId`); `companyId`; name, address, phone, `website` (only if the provider asserts it is official), `profileUrl`, status, rating; `payload` (selected raw attributes); `fetchedAt` (when we fetched it), `sourceUpdatedAt` (when the source last changed it, e.g. OSM last edit — used for freshness), `firstSeenAt`, `lastSeenAt`; `retentionExpiresAt`, `purgedAt` |
 | `SavedSearch` | a reusable search, optionally run daily | `params`, `schedule` (`daily`/none), `scheduleHour`, `nextRunAt`, `lastRunAt` |
 
 ## Companies and evidence
@@ -44,8 +44,8 @@ Source · ProviderUsage · CacheEntry · SecretSetting · Setting · User · Ses
 |---|---|---|
 | `Company` | merged business entity | `name`, `normalizedName`, `industry`, `categories`, `primaryDomain`, `phoneE164`, address, `lat`/`lng`, `businessStatus`, `rating`/`ratingCount`/`priceLevel`, `sources` (provider IDs), `discrepancies` (conflicting values with sources and times), `isExistingClient`, `doNotContact`, `firstSeenAt`, `lastSeenAt`, `lastVerifiedAt`, `sourceTimestamp` |
 | `Location` | additional branches of a company | address, coordinates, phone, `sources` |
-| `Website` | the official website decision (1:1 with company) | `url`, `domain`, `status` (`found`/`not_found`/`unreachable`), `confidence`, `discoverySource`, `discoveryLog` (every candidate with its verdict and reasons), `notFoundReason`, `platform`, `lastAnalyzedAt` |
-| `Analysis` | one live analysis snapshot | `status`, `analyzerVersion`, `redirectChain`, `pagesVisited`, `metrics` (lab performance and in-page measurements), `tech`, `summary`, `contactsFound`, `errors`, `aiStatus`/`aiModel`, `lighthouse` (null unless it really ran), `fingerprint`, `contentHash`, `diff` (vs the previous snapshot) |
+| `Website` | the official website decision (1:1 with company) | `url`, `domain`, `status` (`found`/`not_found`/`unreachable`/`unverified` — no source listed a site and no web search ran), `confidence`, `discoverySource`, `discoveryLog` (every candidate with its verdict and reasons), `notFoundReason`, `platform`, `lastAnalyzedAt` |
+| `Analysis` | one live analysis snapshot | `status` (completed/partial/unreachable/robots_disallowed/blocked/failed — `blocked` = bot protection, never bypassed, no findings), `analyzerVersion`, `redirectChain`, `pagesVisited`, `metrics` (lab performance and in-page measurements), `tech`, `summary`, `contactsFound`, `errors`, `aiStatus`/`aiModel`, `lighthouse` (null unless it really ran), `fingerprint`, `contentHash`, `diff` (vs the previous snapshot) |
 | `Finding` | one evidence-backed observation | `code`, `category`, `polarity` (negative/positive/neutral), `severity`, `kind` (`observed`/`measured`/`ai_observation`), `source` (`code`/`ai`/`lighthouse`), `title`, `detail`, `evidence[]`, `pageUrl`, `viewport`, `confidence`, `problemTags` |
 | `Screenshot` | image file metadata | `viewport`, `kind` (`viewport`/`fullpage`), `path` (under `DATA_DIR/screenshots/<analysisId>/`), `sha256` |
 | `Contact` | public business contact | unique (`companyId`, `type`, `normalizedValue`); `type` (email/phone/contact_form/social), `source`, `sourceUrl`, `status` (verified/probable/unverified), `confidence`, `isRoleBased`, `isPersonal`, `sightings[]` (every observation with source, URL, time, on-official-site), `lastVerifiedAt`, `expiredAt` (set when only purged listings supported it) |
@@ -81,7 +81,7 @@ Source · ProviderUsage · CacheEntry · SecretSetting · Setting · User · Ses
 | `ProviderUsage` | per provider per day: calls, failures, cache hits, AI input/output tokens |
 | `CacheEntry` | provider and AI response cache: `key` (hash), `namespace`, `value`, `expiresAt` |
 | `SecretSetting` | API keys entered in the UI: AES-256-GCM `ciphertext` and `last4` only |
-| `Setting` | small key/value settings |
+| `Setting` | small key/value settings; also worker heartbeats (`worker:<host:pid>`), which `/api/health` uses to report live workers |
 | `User`, `Session` | owner account (scrypt hash) and sessions (stored as token **hashes**) |
 
 ## Lifecycle rules

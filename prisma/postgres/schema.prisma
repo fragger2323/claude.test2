@@ -241,7 +241,7 @@ model SearchQuery {
   searchJob       SearchJob  @relation(fields: [searchJobId], references: [id], onDelete: Cascade)
   text            String
   /// bare niche term used in the query (e.g. "dentysta")
-  term            String      @default("")
+  term            String     @default("")
   language        String
   segment         String?
   strategy        String
@@ -395,6 +395,8 @@ model SourceRecord {
   priceLevel         Int?
   payload            Json?
   fetchedAt          DateTime   @default(now())
+  /// when the source itself last changed this record (e.g. OSM last edit), if it says so
+  sourceUpdatedAt    DateTime?
   firstSeenAt        DateTime   @default(now())
   lastSeenAt         DateTime   @default(now())
   retentionExpiresAt DateTime?

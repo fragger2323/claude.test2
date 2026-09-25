@@ -43,11 +43,12 @@ export interface LeadFitInput {
     isExistingClient: boolean;
     doNotContact: boolean;
   };
-  website: { status: 'found' | 'not_found' | 'unreachable' | 'none'; analyzed: boolean; analysisStatus?: string | null };
+  website: { status: 'found' | 'not_found' | 'unreachable' | 'unverified' | 'none'; analyzed: boolean; analysisStatus?: string | null };
   findings: FindingForScoring[];
   serviceFit: { score: number | null; serviceName: string | null };
   contacts: Array<{ type: string; status: string; isRoleBased?: boolean }>;
-  freshness: { score: number; factors: ScoreFactor[] };
+  /** null = unknown (only undated sources) */
+  freshness: { score: number | null; factors: ScoreFactor[] };
   nicheKey?: string | null;
   params?: Partial<SearchParams>;
   profile?: { preferredIndustries: string[]; excludedIndustries: string[]; preferredCountries: string[]; preferredCities: string[] };
@@ -65,11 +66,15 @@ function websiteNeed(i: LeadFitInput): ScoreComponent {
   if (i.website.status === 'not_found') {
     return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: 90, weight: 0, factors: [{ label: 'No official website found', points: 90, kind: 'fact' }] };
   }
+  if (i.website.status === 'unverified') {
+    return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: null, weight: 0, factors: [{ label: 'Website existence unknown (no source lists one; no web search was run)', points: 0, kind: 'gap' }] };
+  }
   if (i.website.status === 'unreachable' && !i.website.analyzed) {
     return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: 55, weight: 0, factors: [{ label: 'Listed website could not be reached (cause unknown)', points: 55, kind: 'observation' }] };
   }
   if (!i.website.analyzed) {
-    return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: null, weight: 0, factors: [{ label: 'Website not analysed yet', points: 0, kind: 'gap' }] };
+    const label = i.website.analysisStatus === 'blocked' ? 'Site shows bot protection to automated visitors — not analysed (check it yourself)' : i.website.analysisStatus === 'robots_disallowed' ? 'robots.txt asks tools not to visit — not analysed' : 'Website not analysed yet';
+    return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: null, weight: 0, factors: [{ label, points: 0, kind: 'gap' }] };
   }
   const negative = i.findings.filter((f) => f.polarity === 'negative');
   let points = 0;
@@ -306,9 +311,18 @@ export function computeLeadFit(i: LeadFitInput): LeadFitResult {
   if (exclusion) {
     priority = 'excluded';
     reasons.push(exclusion);
+  } else if (i.website.status === 'unverified') {
+    priority = 'insufficient_data';
+    reasons.push('Website not verified — no source lists one and no web search was run; add the website or configure web search');
   } else if (leadFit == null || dataCompleteness < 0.6 || (i.website.status === 'found' && !i.website.analyzed)) {
     priority = 'insufficient_data';
-    reasons.push(i.website.status === 'found' && !i.website.analyzed ? 'Website found but not analysed yet' : `Only ${Math.round(dataCompleteness * 100)}% of scoring inputs are available`);
+    reasons.push(
+      i.website.status === 'found' && !i.website.analyzed
+        ? i.website.analysisStatus === 'blocked'
+          ? 'Website blocks automated analysis (bot protection) — review it manually'
+          : 'Website found but not analysed yet'
+        : `Only ${Math.round(dataCompleteness * 100)}% of scoring inputs are available`,
+    );
   } else if (leadFit >= 72 && (wn ?? 0) >= 60 && (sf ?? 0) >= 55 && ct >= 40) priority = 'very_high';
   else if (leadFit >= 60 && (wn ?? 0) >= 45 && ct >= 25) priority = 'high';
   else if (leadFit >= 45) priority = 'medium';

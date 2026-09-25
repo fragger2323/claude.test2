@@ -1,5 +1,6 @@
 import { mapLimit } from '../../lib/concurrency.js';
 import { parseRobots } from '../../lib/robots.js';
+import { looksLikeChallenge } from './challenge.js';
 import { fetchPage } from './fetcher.js';
 import type { HttpChecks, LinkCheck } from './types.js';
 
@@ -11,7 +12,9 @@ export async function runHttpChecks(url: string, signal?: AbortSignal): Promise<
 
   const httpsRes = await fetchPage(httpsUrl, { signal, timeoutMs: 20_000 });
   const httpRes = await fetchPage(httpUrl, { signal, timeoutMs: 15_000, method: 'GET', maxBytes: 64 * 1024 });
-  const main = httpsRes.ok ? httpsRes : httpRes;
+  // HTTPS works at the transport level when it produced any HTTP response (even 403/404).
+  const httpsResponded = httpsRes.status != null;
+  const main = httpsRes.ok ? httpsRes : httpRes.ok ? httpRes : httpsResponded ? httpsRes : httpRes;
   const finalUrl = main.finalUrl ?? null;
   const origin = finalUrl ? new URL(finalUrl).origin : new URL(httpsRes.ok ? httpsUrl : httpUrl).origin;
 
@@ -43,8 +46,9 @@ export async function runHttpChecks(url: string, signal?: AbortSignal): Promise<
   const headers = main.headers ?? {};
   return {
     inputUrl: url,
-    httpsOk: httpsRes.ok,
-    httpsError: httpsRes.ok ? undefined : httpsRes.error ?? (httpsRes.status ? `HTTP ${httpsRes.status}` : 'unreachable'),
+    httpsOk: httpsResponded,
+    httpsError: httpsResponded ? undefined : httpsRes.error ?? 'unreachable',
+    httpsErrorCode: httpsResponded ? undefined : httpsRes.errorCode,
     httpRedirectsToHttps,
     redirectChain: main.redirects,
     homepageStatus: main.status ?? null,
@@ -56,13 +60,15 @@ export async function runHttpChecks(url: string, signal?: AbortSignal): Promise<
     robots: { found: robots.found, disallowAll: robots.found && !robots.isAllowed('/'), sitemaps: robots.sitemaps.slice(0, 5) },
     sitemap,
     soft404,
+    challenge: looksLikeChallenge(main.title, main.html, main.status),
     lastModified: headers['last-modified'] ?? null,
   };
 }
 
 /**
  * Checks links found on analysed pages. Internal links: up to `maxInternal`; external: up to `maxExternal`.
- * 401/403/405/429 from external hosts are "unverifiable" (bot protection), not broken.
+ * 401/403/405/429, timeouts and blocked targets are "unverifiable", not broken; only 404/410/5xx
+ * (confirmed by GET) and connection failures count as broken.
  */
 export async function checkLinks(
   links: Array<{ url: string; internal: boolean; foundOn: string }>,
@@ -84,13 +90,13 @@ export async function checkLinks(
     4,
     async (l): Promise<LinkCheck> => {
       let r = await fetchPage(l.url, { signal: opts.signal, timeoutMs: 12_000, method: 'HEAD' });
-      if (r.status === 405 || r.status === 501 || (!r.ok && !r.status)) {
-        r = await fetchPage(l.url, { signal: opts.signal, timeoutMs: 12_000, maxBytes: 32 * 1024 });
-      }
+      // Many servers answer HEAD wrongly (404/405/501) — confirm every failure with a small GET.
+      if (!r.ok) r = await fetchPage(l.url, { signal: opts.signal, timeoutMs: 12_000, maxBytes: 32 * 1024 });
       const status = r.status;
-      const unverifiable = !l.internal && (status === 401 || status === 403 || status === 405 || status === 429 || status === 999);
-      const broken = !unverifiable && (status == null ? r.errorCode !== 'ssrf' : status >= 400);
-      return { url: l.url, internal: l.internal, status, error: r.error, broken, unverifiable: unverifiable || r.errorCode === 'ssrf', foundOn: l.foundOn };
+      // Auth walls, bot protection and rate limits say nothing about whether the page exists.
+      const unverifiable = (status != null && [401, 403, 405, 429, 999].includes(status)) || (status == null && r.errorCode !== 'network');
+      const broken = !unverifiable && (status == null || status >= 400);
+      return { url: l.url, internal: l.internal, status, error: r.error, broken, unverifiable, foundOn: l.foundOn };
     },
     opts.signal,
   );

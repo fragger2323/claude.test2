@@ -54,6 +54,8 @@ const schema = z.object({
   ANALYSIS_MAX_PAGES: int(4, 1, 15),
   ANALYSIS_TIMEOUT_MS: int(45_000, 5_000, 180_000),
   ANALYSIS_CONCURRENCY: int(2, 1, 8),
+  /** Hard time budget for analysing one website (all viewports, pages and link checks). */
+  ANALYSIS_SITE_BUDGET_MS: int(180_000, 30_000, 900_000),
   REANALYZE_AFTER_DAYS: int(14, 0, 365),
   ALLOW_PRIVATE_NETWORK_TARGETS: bool(false),
   RESPECT_ROBOTS_TXT: bool(true),

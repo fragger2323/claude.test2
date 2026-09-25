@@ -10,6 +10,7 @@ import { getLogger } from '../lib/logger.js';
 import { db } from '../db/client.js';
 import { registerAuthHooks, registerAuthRoutes } from './auth.js';
 import { HttpProblem } from './validation.js';
+import { liveWorkers } from '../jobs/worker.js';
 import { registerSearchRoutes } from './routes/search.js';
 import { registerLeadRoutes } from './routes/leads.js';
 import { registerBusinessRoutes } from './routes/business.js';
@@ -66,7 +67,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     await db().$queryRawUnsafe('SELECT 1');
     const queued = await db().job.count({ where: { status: 'queued' } });
     const running = await db().job.count({ where: { status: 'running' } });
-    return { ok: true, time: new Date().toISOString(), jobs: { queued, running } };
+    const workers = await liveWorkers();
+    return { ok: true, time: new Date().toISOString(), jobs: { queued, running }, workers };
   });
   registerSearchRoutes(app);
   registerLeadRoutes(app);

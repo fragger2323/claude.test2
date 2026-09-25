@@ -127,6 +127,11 @@ describe('full search pipeline (mock providers + live fixture websites)', () => 
     expect(biale!.website?.status).toBe('not_found');
     expect(JSON.stringify(biale!.website?.discoveryLog)).toMatch(/booking profile/);
     expect(biale!.lead?.primaryServiceSlug).toBe('new-business-website');
+    // No source lists a website and no web search is configured: unknown, never "no website"
+    const kowalski = await db().company.findFirst({ where: { name: 'Gabinet Stomatologiczny Kowalski' }, include: { website: true, lead: true } });
+    expect(kowalski!.website?.status).toBe('unverified');
+    expect(kowalski!.lead?.priority).toBe('insufficient_data');
+    expect(kowalski!.lead?.primaryServiceSlug).toBeNull();
     // OSM-only clinic's website was verified through the phone number printed on the page
     const usmiech = await db().company.findFirst({ where: { name: 'Uśmiech Mokotów' }, include: { website: true } });
     expect(usmiech!.website?.status).toBe('found');

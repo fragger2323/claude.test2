@@ -35,6 +35,8 @@ export interface NormalizedBusiness {
   /** Selected raw attributes (subject to the provider's retention policy). */
   raw?: Record<string, unknown>;
   fetchedAt: Date;
+  /** When the source itself last changed this record (e.g. OpenStreetMap last edit), if known. */
+  sourceUpdatedAt?: Date;
 }
 
 export interface GeoArea {

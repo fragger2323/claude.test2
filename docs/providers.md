@@ -18,7 +18,8 @@ how to set it up. Providers can also be switched off in Settings without removin
 
 `callProviderJson` (`src/providers/base.ts`) runs these steps in order:
 
-1. **Circuit breaker** (`providers/health.ts`). After 5 consecutive failures the provider is
+1. **Circuit breaker** (`providers/health.ts`). After 5 consecutive failed *requests* (a request's
+   internal retries count once; every attempt is still counted as a billable call) the provider is
    skipped for 2 minutes, doubling each time up to 30 minutes. HTTP 401/403 opens it immediately
    for 16 minutes, with the message "check the API key and API enablement". State is kept per
    process and mirrored to the `Source` table for the UI: total calls, failures, average latency,
@@ -79,6 +80,9 @@ fails").
 - Free and keyless. Set `OSM_CONTACT_EMAIL`: the Nominatim usage policy asks you to identify
   yourself. We send at most one request every 2 seconds and cache aggressively. For heavy use,
   run your own instance (`NOMINATIM_BASE_URL`, `OVERPASS_BASE_URL`).
+- The Overpass query uses `out meta`, so each POI carries its **last-edit timestamp**; it is
+  stored as `sourceUpdatedAt` and drives freshness. The contributor fields that come with it are
+  never stored.
 - Used as a **geo provider** (city geocoding, district subdivisions for segmented queries) and as
   a **structured source**: one Overpass query per niche and area using the niche's OSM tags from
   `src/domain/taxonomy.ts`. The orchestrator therefore sends it one task per job, not one per
@@ -88,7 +92,10 @@ fails").
 ### Web discovery (Brave Search / Google Programmable Search)
 
 - Used to find **official websites** when sources don't list one, and as an extra discovery
-  source. Results pass through the same website verification as any other candidate: directory,
+  source. As a source it only accepts homepage-like results (URL depth ≤ 1) whose title is not a
+  listing, ranking or article; news, classifieds, jobs, deals, government and directory domains
+  are rejected. Without a search API, businesses with no listed website are marked "website not
+  verified" rather than "no website". Results pass through the same website verification as any other candidate: directory,
   social, booking and map domains are rejected, and the homepage must contain the company's
   name, phone or address. A search-only candidate needs stronger on-page evidence.
 - Brave: `BRAVE_SEARCH_API_KEY`. Google: `GOOGLE_CSE_API_KEY` + `GOOGLE_CSE_CX`. Google's API

@@ -95,7 +95,7 @@ export function SourceChips({ sources, max = 4 }: { sources: string[]; max?: num
 }
 
 export function FreshnessBadge({ value }: { value: number | null | undefined }) {
-  if (value == null) return <span className="text-ink-3">—</span>;
+  if (value == null) return <span className="text-[12px] text-ink-3" title="Only undated data: we cannot tell how current it is">age unknown</span>;
   const label = value >= 85 ? 'Fresh' : value >= 65 ? 'Recent' : value >= 40 ? 'Aging' : 'Stale';
   return <Badge tone={value >= 65 ? 'ok' : value >= 40 ? 'warn' : 'bad'}>{label}</Badge>;
 }

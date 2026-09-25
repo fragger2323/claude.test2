@@ -16,7 +16,7 @@ interface MiniLead {
   mainOpportunity: string | null;
   primaryServiceSlug: string | null;
   stageChangedAt: string;
-  company: { name: string; city: string | null; industry: string | null };
+  company: { name: string; city: string | null; industry: string | null; website?: { url: string | null; status: string } | null };
 }
 interface TodayData {
   date: string;
@@ -110,59 +110,76 @@ export default function Today() {
         </Panel>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title={`New best leads (${t.newBestLeads.length})`}>
-          <LeadList leads={t.newBestLeads} empty="No new high-priority leads this week." meta={(l) => [l.company.city, l.primaryServiceSlug && titleCase(l.primaryServiceSlug), l.mainOpportunity].filter(Boolean).join(' · ')} />
-        </Panel>
-        <Panel title={`Follow-ups due (${t.followUpsDue.length})`}>
-          {t.followUpsDue.length === 0 ? (
-            <div className="py-3 text-[12px] text-ink-3">No follow-ups due today.</div>
-          ) : (
-            <ul className="divide-y divide-line">
-              {t.followUpsDue.map((f) => (
-                <li key={f.id}>
-                  <Link to={`/leads/${f.lead.id}`} className="flex items-center justify-between gap-2 py-2 hover:bg-sunken/50">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-medium">{f.lead.company.name}</div>
-                      <div className="truncate text-[11.5px] text-ink-3">{f.note ?? 'Follow up'}</div>
-                    </div>
-                    <Badge tone={f.overdue ? 'bad' : 'info'}>{f.overdue ? `overdue ${relTime(f.dueAt)}` : 'today'}</Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-        <Panel title={`Replies (${t.replies.length})`}>
-          <LeadList leads={t.replies} empty="No replies waiting." meta={(l) => `replied ${relTime(l.stageChangedAt)}`} />
-        </Panel>
-        <Panel title={`Meetings (${t.meetings.length})`}>
-          <LeadList leads={t.meetings} empty="No meetings in progress." meta={(l) => `since ${fmtDate(l.stageChangedAt)}`} />
-        </Panel>
-        <Panel title={`Proposals (${t.proposals.length})`}>
-          <LeadList leads={t.proposals} empty="No open proposals." meta={(l) => `sent ${relTime(l.stageChangedAt)}`} />
-        </Panel>
-        <Panel title={`Recently won (${t.recentlyWon.length})`}>
-          {t.recentlyWon.length === 0 ? (
-            <div className="py-3 text-[12px] text-ink-3">No wins in the last 30 days yet.</div>
-          ) : (
-            <ul className="divide-y divide-line">
-              {t.recentlyWon.map((w) => (
-                <li key={w.id} className="flex items-center justify-between py-2 text-[13px]">
-                  <Link className="font-medium hover:underline" to={`/leads/${w.lead.id}`}>
-                    {w.lead.company.name}
-                  </Link>
-                  <span className="tnum text-ink-3">{w.dealValue ?? ''} · {fmtDate(w.recordedAt)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+      {(() => {
+        // Only sections with something in them get a card; empty ones collapse into one line.
+        const sections: Array<{ key: string; title: string; count: number; node: ReactNode }> = [
+          { key: 'best', title: 'New best leads', count: t.newBestLeads.length, node: <LeadList leads={t.newBestLeads} empty="" meta={(l) => [l.company.city, l.primaryServiceSlug && titleCase(l.primaryServiceSlug), l.mainOpportunity].filter(Boolean).join(' · ')} /> },
+          {
+            key: 'followups',
+            title: 'Follow-ups due',
+            count: t.followUpsDue.length,
+            node: (
+              <ul className="divide-y divide-line">
+                {t.followUpsDue.map((f) => (
+                  <li key={f.id}>
+                    <Link to={`/leads/${f.lead.id}`} className="flex items-center justify-between gap-2 py-2 hover:bg-sunken/50">
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium">{f.lead.company.name}</div>
+                        <div className="truncate text-[11.5px] text-ink-3">{f.note ?? 'Follow up'}</div>
+                      </div>
+                      <Badge tone={f.overdue ? 'bad' : 'info'}>{f.overdue ? `overdue ${relTime(f.dueAt)}` : 'today'}</Badge>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ),
+          },
+          { key: 'replies', title: 'Replies', count: t.replies.length, node: <LeadList leads={t.replies} empty="" meta={(l) => `replied ${relTime(l.stageChangedAt)}`} /> },
+          { key: 'meetings', title: 'Meetings', count: t.meetings.length, node: <LeadList leads={t.meetings} empty="" meta={(l) => `since ${fmtDate(l.stageChangedAt)}`} /> },
+          { key: 'proposals', title: 'Proposals', count: t.proposals.length, node: <LeadList leads={t.proposals} empty="" meta={(l) => `sent ${relTime(l.stageChangedAt)}`} /> },
+          {
+            key: 'won',
+            title: 'Won (30 days)',
+            count: t.recentlyWon.length,
+            node: (
+              <ul className="divide-y divide-line">
+                {t.recentlyWon.map((w) => (
+                  <li key={w.id} className="flex items-center justify-between py-2 text-[13px]">
+                    <Link className="font-medium hover:underline" to={`/leads/${w.lead.id}`}>
+                      {w.lead.company.name}
+                    </Link>
+                    <span className="tnum text-ink-3">{w.dealValue ?? ''} · {fmtDate(w.recordedAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            ),
+          },
+        ];
+        const filled = sections.filter((x) => x.count > 0);
+        const idle = sections.filter((x) => x.count === 0);
+        return (
+          <>
+            {filled.length > 0 && (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {filled.map((x) => (
+                  <Panel key={x.key} title={`${x.title} (${x.count})`}>
+                    {x.node}
+                  </Panel>
+                ))}
+              </div>
+            )}
+            {idle.length > 0 && (
+              <p className="text-[12px] text-ink-3">
+                Nothing waiting in: {idle.map((x) => x.title).join(' · ')}.
+              </p>
+            )}
+          </>
+        );
+      })()}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Panel title={`Leads requiring review (${t.needsReview.length})`}>
-          <LeadList leads={t.needsReview} empty="Nothing to review." meta={(l) => (l.priority === 'insufficient_data' ? 'insufficient data — run analysis' : 'website unreachable or conflicting data')} />
+          <LeadList leads={t.needsReview} empty="Nothing to review." meta={(l) => (l.company.website?.status === 'unverified' ? 'website not verified — add it or configure web search' : l.priority === 'insufficient_data' ? 'insufficient data — run analysis' : 'website unreachable or conflicting data')} />
         </Panel>
         <Panel title="Learning" actions={<Brain className="size-4 text-ink-3" />}>
           <div className="tnum text-xl font-semibold">

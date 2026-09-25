@@ -121,13 +121,15 @@ export async function analyzeCompanyWebsite(
     return { analysisId: analysis.id, status: 'failed', findings: 0 };
   }
 
-  const drafts: FindingDraft[] = buildFindings(raw);
+  const drafts: FindingDraft[] = buildFindings(raw, { country: company.country });
+  const sawRealSite = raw.status === 'completed' || raw.status === 'partial';
   const screenshots = Object.values(raw.runs).flatMap((r) => r?.screenshots ?? []);
 
   // AI visual analysis — optional; failure never discards the technical analysis.
   const visual = await runVisualAnalysis({
     ai: opts.ai,
-    enabled: opts.visualAi && cfg.AI_VISUAL_ANALYSIS,
+    // never on a bot-challenge or error page — only on the real site
+    enabled: opts.visualAi && cfg.AI_VISUAL_ANALYSIS && sawRealSite,
     screenshots,
     screenshotDir: join(screenshotRoot, analysis.id),
     context: { companyName: company.name, industry: company.industry, url: raw.finalUrl ?? website.url, codeFindingTitles: drafts.filter((f) => f.polarity === 'negative').map((f) => f.title) },
@@ -234,7 +236,8 @@ export async function analyzeCompanyWebsite(
       status: status === 'unreachable' ? 'unreachable' : 'found',
     },
   });
-  await db().company.update({ where: { id: companyId }, data: { lastVerifiedAt: status === 'unreachable' ? undefined : new Date() } });
+  // Only a successful look at the real site counts as live verification.
+  if (sawRealSite) await db().company.update({ where: { id: companyId }, data: { lastVerifiedAt: new Date() } });
   opts.log.info({ companyId, url: website.url, status, findings: drafts.length, ai: visual.status }, 'analysis stored');
   return { analysisId: analysis.id, status, findings: drafts.length };
 }

@@ -81,6 +81,11 @@ Company websites come from third-party data, so any of them could be hostile.
   refuses to start with it.
 - robots.txt is honoured (`RESPECT_ROBOTS_TXT`), request rates are low, and the user agent
   identifies the tool.
+- **Bot protection is never bypassed.** Challenge pages (Cloudflare, captcha walls, WAF 401/403/429)
+  end the analysis with status `blocked`; nothing is concluded about such a site and no AI is run
+  on the challenge screenshot.
+- **Bounded work.** `page.evaluate` timeouts, per-run hard deadlines (force-close / browser
+  restart) and a per-site budget prevent a hostile page from pinning a worker.
 
 ### Data protection and acceptable use
 

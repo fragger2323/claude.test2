@@ -274,6 +274,14 @@ export default function NewSearch() {
             FIND BEST LEADS
           </Button>
         </div>
+        {active.length > 0 && (active.length === 1 || !active.some((s) => s.id === 'web_search')) && (
+          <p className="mt-2 text-[12px] text-ink-3">
+            {active.length === 1 ? `Only one source (${providerName(active[0]!.id)}) is active, so coverage and deduplication are limited. ` : ''}
+            {!active.some((s) => s.id === 'web_search')
+              ? 'Web search is not configured: businesses whose listings have no website are shown as “website not verified” (not as “no website”) until you add the site or configure Brave/Google search in Settings.'
+              : ''}
+          </p>
+        )}
       </form>
     </div>
   );

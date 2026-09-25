@@ -1,181 +1,176 @@
 # Final review
 
-State of the system at the end of this build: what exists, how it was verified, what it costs,
-what is safe, what is still weak and what to do next. It is written for someone deciding whether
-to rely on the tool every morning.
+Updated after an **adversarial review** (2026-09-25). The question was: *"Tomorrow morning I run
+it to find 100 potential clients for my web studio. What will stop it from working?"* Every
+suspicion was checked with code reading **and** an experiment: hostile test websites, realistic
+dedup pairs, real-world URL shapes, and a full 100-lead run against 150 websites. What was
+broken is listed below with the fix and the test that now guards it.
 
-## 1. What is implemented
+**Status, honestly:** every automated check passes (see §4), and the problems found were fixed.
+The system is **not** called "production-ready" here, because it has still never talked to the
+real Google, Foursquare, Yelp, Brave, public OpenStreetMap or Anthropic APIs; every run used
+mocks and local websites (§6). Treat the first week of real use as the final acceptance test.
 
-**Workflow.** Niche + city + country + service + quantity (form, natural-language command in
-EN/RU/UK/PL, or the command palette) → search strategy → multi-source fan-out → merge and
-deduplication with provenance and conflict reporting → freshness and exclusions → official
-website discovery with a logged verdict per candidate → live analysis in Chromium (desktop,
-tablet, mobile, internal pages, HTTP and link checks) → evidence-backed findings → public
-contacts with verified/probable/unverified status → service matching (primary, secondary, do
-not recommend) → transparent Lead Fit and priority with reasons → chance of sale (heuristic,
-or a calibrated model once your own data allows) → decision intelligence (why this lead, why
-now, what to offer, what to mention, what not to claim, best channel, pain points, and
-KNOW/OBSERVED/INFER/DON'T KNOW) → personalised audit (HTML/PDF/MD/JSON) → outreach drafts in
-4 tones and 5 languages with a claims linter → CRM (stages, activities, follow-ups, outcomes) →
-learning (outcome model, outcome insights, query-template yield).
+## 1. The 32 questions: verdict before → after
 
-**Product surfaces.** Today (rule-based recommended actions over real CRM data), New search, Job
-results (live stages, counts, sources, strategy log, queries, pause/resume/cancel/retry), Leads
-table (filters, sorting, bulk actions, keyboard navigation, CSV/JSON export), Lead detail,
-CRM board with drag and drop, Campaigns, Saved searches (daily schedule; the scheduler never
-sends anything), Dashboard (real data, sample sizes shown), Learning, My Business (profile,
-services, portfolio, re-qualify), Import, Settings (sources, keys, usage, AI budget),
-Onboarding (5 steps), command palette and keyboard shortcuts, light and dark themes,
-responsive down to 390px.
+| # | Question | Before the review | Now |
+|---|---|---|---|
+| 1 | Several sources? | Yes, fan-out to every configured source with dedup across them. With no keys it is OSM only, and the UI didn't say what that means. | Same fan-out. The search form now says when only one source is active and when web search is missing, and what that implies. |
+| 2 | Dedup quality | Good on 9 realistic pairs, but **a shared phone merged two clinics 9.5 km apart** ("Centrum Implantologii Wiśniewska" + "…Nowakowski"), found by the scale run. | Similarity on *distinctive* name words only; >2 km apart never merges without the same domain. 10 realistic cases are regression tests; scale run: 180/180 companies. |
+| 3 | Directory pages confused with companies? | **Yes.** News sites, classifieds, job boards, gov portals, `cylex-polska.pl`, `kliniki.pl`, `moment.pl` … passed as official websites; listicle titles became company names ("ranking 2025", "zestawienie"). | Domain rules extended (media, jobs, government, classifieds, keyword directories); web-search results must look like a homepage and a single business. Tests. |
+| 4 | Freshness | **False.** It used the time *we* fetched the data, so an OSM entry last edited in 2016 showed "Fresh 100, verified today". | Only a live website check, a maintained listing (Google/Foursquare/Yelp, capped at 85) or the source's own edit date count (OSM `timestamp` now stored). Undated data shows "age unknown". |
+| 5 | Sites checked live? | Yes (Chromium, 3 viewports). | Yes, and now bounded and honest about what it could not see (6, 11, 16). |
+| 6 | Fabricated findings? | **Yes, four ways:** bot-challenge pages analysed as the site; "phone not tappable" triggered by years, tax IDs and bank numbers; "HTTPS missing" on a timeout or on a 403; console errors caused by our own sandbox counted as the site's. Internal 403/429 and HEAD-only 404 counted as broken links. | Challenge pages → `blocked`, no findings, no AI. Only valid phone numbers count. HTTPS "missing" only on a real transport failure. Self-inflicted console noise filtered. Links: failures confirmed by GET; 401/403/429/timeouts are "unverifiable". Hostile-site tests. |
+| 7 | Fabricated e-mails? | None guessed, but **a web agency's footer address was stored as the business's "verified" e-mail**. | Credit-line addresses are ignored; on-site addresses on another organisation's domain are only "probable" with a note; free-mail stays valid. Tests. |
+| 8 | False confidence? | **Yes:** without web search, every business whose listing had no website was "No official website found" → Website Need 90 → a "new website" pitch (10 of 39 in the scale run actually had a site); fetch-time freshness; bot-protected sites scored as "site is down". | New website state `unverified` (gap, "insufficient data", no pitch, *Add website* button); honest freshness; bot-protected sites exist but are "not verified". |
+| 9 | Service matching tied to problems? | Yes, via problem tags and finding IDs. One flaw (fixed in the first review): pain points paired with unrelated services. | Unchanged; no service is pitched for an unverified website. |
+| 10 | Background search works? | Yes with `npm run dev`. With `npm start` alone, **no worker runs and the job page said "Waiting for the worker…" forever**. | Worker heartbeat; `/api/health` reports live workers; the job page says "No worker is running" and how to start one. Test. |
+| 11 | Playwright hangs? | **Yes.** A page that freezes its main thread blocked `page.evaluate` forever (test hit its 90 s limit). | Timeouts on every evaluate, a hard deadline per browser run (force-close, browser restart), a per-site budget (180 s), and remaining viewports skipped on a frozen page. The frozen page now costs ~12 s. |
+| 12 | Uncontrolled concurrency? | No: global/provider/analysis/browser-context limits held. Scale run peak: 2 browser contexts, ≤ 24 requests to one site. | Same, plus per-site time budget. |
+| 13 | Retries correct? | Mostly. **The circuit breaker counted every retry attempt**, so two flaky requests could take Google out for the whole job. | The breaker counts requests; every attempt is still counted as billable usage. Test. |
+| 14 | Cache works? | Yes (TTL-checked, expired entries deleted). | Now covered by a direct test (hit, expiry, TTL 0). |
+| 15 | Provider down? | Failover works (test: Google 503 → OSM results). | Same; with the retry fix, a brief outage no longer disables the provider. |
+| 16 | Site down? | "Unreachable", not closed, but error pages (404/403) were analysed as content. | 4xx/5xx → `unreachable` (one status finding); 401/403/429/challenge → `blocked`; never "closed". |
+| 17 | No contact? | Handled: priority capped at Medium, not "contact ready", "No public business contact found". | Unchanged. |
+| 18 | CRM works? | Yes (stages, follow-ups, activities, outcomes; API + E2E tests). | Unchanged. |
+| 19 | Feedback loop? | Outcomes → contact-time snapshot → training; query-template yield reorders future searches. | Unchanged. |
+| 20 | Outcomes saved? | Yes, with features frozen at contact time (tests). | Unchanged. |
+| 21 | Train qualification on my results? | **Partly.** The model (≥ 40 labelled leads, must beat the base rate) produces a calibrated chance with interval, and insights. Priority rules stay transparent heuristics (weights are configurable via the business profile API, not in the UI). | Unchanged. Stated plainly in §5. |
+| 22 | Portfolio matching? | Correct: only stored facts, threshold 0.4, nothing suggested otherwise (tests). | Unchanged. |
+| 23 | Search → contact-ready speed | **Slow to show anything:** scoring ran only after all analyses, so the first ranked lead appeared after **24.6 min** in the 100-lead run. | Progressive scoring: every lead is scored provisionally when analysis starts and re-scored as soon as its site is analysed. First contact-ready lead after about 2 min in the scale run (§3). |
+| 24 | UI clear? | Mostly. "Waiting for the worker…" forever; raw status words; 6 empty cards on day one. | Worker warning, explained analysis statuses, "website not verified" with *Add website*, empty Today sections collapsed into one line. |
+| 25 | Generic AI dashboard style? | **Yes, partly:** an "AI" logo tile and the stock indigo accent. | Neutral crosshair mark and a deep-teal accent (contrast 6.3:1 light, 9:1 dark). Purple is kept only to mark AI-generated content. |
+| 26 | Security | Reviewed in the first round (WebSockets, sandbox, proxy trust, erasure). | Plus: bot protection never bypassed, bounded browser work, no AI on challenge screenshots. |
+| 27 | API key leaks | None found: bundle contains only key *names*; responses show last 4 characters; logs redact query keys. | Unchanged; re-checked. |
+| 28–32 | lint, typecheck, tests, build, E2E | Passing. | Passing after the fixes (§4). |
 
-**Engineering.** Provider abstraction for 6 sources, 2 web search engines, a geo provider and
-an AI provider. Resilient HTTP (timeouts, retries, backoff, Retry-After, rate limits,
-cancellation, size caps). Circuit breakers, response cache, per-job budgets, monthly AI budget.
-Database job queue with leases, heartbeats, retries and stale-lease recovery; a separate worker
-process with a bounded browser pool. SQLite for development, PostgreSQL for production (one
-schema, generated PostgreSQL schema and migrations). Session auth, CSRF protection, rate limits,
-encrypted secrets, SSRF guard for every fetch and every browser request, CSP. Retention purge
-and per-lead data erasure. Dockerfile and Compose stack.
+## 2. What changed in this round
 
-## 2. How it was verified
+| Problem | Fix | Guarded by |
+|---|---|---|
+| Frozen page hangs the job | `evaluateWithin` timeouts; hard deadline per browser run with force-close/restart; `ANALYSIS_SITE_BUDGET_MS`; skip viewports after a freeze | `tests/integration/analyzer-hostile.test.ts` |
+| Challenge/bot pages analysed | `challenge.ts`; HTTP 401/403/429 and challenge markers → `blocked`; no findings, no AI, no "last verified"; discovery treats them as existing | hostile tests, `tests/unit/adversarial-fixes.test.ts`, `website-discovery.test.ts` |
+| Fake "phone not tappable" | validated phone parsing (libphonenumber) with the business's country | hostile test (years/NIP/KRS/IBAN) |
+| "HTTPS missing" on timeout or 403 | HTTPS = TLS produced any response; timeout = unknown | hostile tests |
+| Broken-link false positives | GET confirms HEAD failures; 401/403/405/429/timeouts unverifiable | — (logic in `http-checks.ts`) |
+| Self-inflicted console errors | filtered (blocked requests, refused WebSockets) | — |
+| Agency e-mail as business contact | credit-line filter; foreign-domain → probable; free-mail allowed | hostile test, unit test |
+| False "no website" | `unverified` website state end to end (discovery, scoring, services, decision notes, counts, filters, UI, *Add website* endpoint) | unit + pipeline + API tests |
+| Fetch-time freshness | new freshness model; `SourceRecord.sourceUpdatedAt` (+ SQLite and PostgreSQL migrations); OSM `out meta` | `scoring.test.ts`, unit tests |
+| Directories/news as companies | extended domain classes; homepage + single-business title rules for web search | unit tests |
+| Shared-phone false merge | distinctive-name similarity; 2 km rule | 10 regression cases in `entity-resolution.test.ts`; scale run |
+| Circuit breaker counted retries | per-request health, per-attempt usage | `tests/integration/resilience.test.ts` |
+| No worker → silent | heartbeat, `/api/health.workers`, job-page alert | resilience test |
+| Late ranking | progressive qualification during analysis | scale run |
+| UI | brand mark, accent, Today, statuses, "age unknown", single-source note | E2E + phone-layout test |
+
+## 3. The 100-lead scale run (`npm run test:scale`)
+
+Setup: 150 generated clinic websites, each on its own loopback address, plus 30 businesses
+without a site. Mocked Nominatim, Overpass (170 POIs) and Google Places (60 overlapping + 10
+unique). Real worker, real Chromium, SQLite. The "after" run adds 9 hostile sites: frozen main
+thread, bot challenge, never-ending response. Machine: 4 vCPU, 16 GB.
+
+| Metric | Before fixes | After fixes (with hostile sites) |
+|---|---|---|
+| Job status | completed | pending |
+| Total time | 24.6 min | pending |
+| First ranked lead | 24.6 min (at the very end) | pending |
+| First contact-ready lead | 24.6 min | pending |
+| Unique companies (expected 180) | **179** (false merge) | pending |
+| Leads falsely pitched "no website" | **10** of 39 | pending |
+| Websites analysed / statuses | 140 completed | pending |
+| Hung jobs | – (no hostile sites) | pending |
+| Peak browser contexts / peak requests to one site | 2 / 24 | pending |
+| Provider calls | 51 | pending |
+
+Throughput is ~10 s per site at the default concurrency (2 browser contexts) on these local
+sites. Real sites are slower, so expect roughly 20–40 minutes for 100 leads with analysis, while
+ranked leads keep appearing from the first minutes. `BROWSER_POOL_SIZE` and
+`ANALYSIS_CONCURRENCY` (e.g. 3–4 on a 4-core machine) trade CPU/RAM for speed.
+
+## 4. Verification after the fixes
 
 | Check | Result |
 |---|---|
-| `npm run lint` (ESLint, zero warnings allowed) | clean |
-| `npm run typecheck` (server + web, strict) | clean |
-| `npm test` — 12 unit + 4 integration files | **159 / 159 passed** (~37 s) on SQLite |
-| `npm run test:pg` — same suite on **PostgreSQL 16** through the real migrations | **159 / 159 passed** |
-| `npm run test:e2e` — Playwright: setup → NL search → results → lead → audit → outreach → mark contacted → CRM → Today/Dashboard, plus a 390px phone-layout check on 10 pages | **2 / 2 passed** |
-| `npm run build` | SPA + server/worker/CLI bundles |
-| Production mode (`NODE_ENV=production node dist/server/index.js` + worker) | health OK, SPA served, security headers, setup requires `SETUP_TOKEN` |
-| Docker Compose (PostgreSQL, migrations, API, worker) | built and run: API healthy, worker processing, CSV import processed end to end, audit PDF rendered by **sandboxed** Chromium (non-root) |
-| Load (3,000 leads, 24,000 findings, SQLite) | lead list 7 ms · filtered list 6 ms · Today 59 ms · CRM board 41 ms · dashboard 179 ms · full CSV export 615 ms |
+| `npm run lint` (zero warnings allowed) | pass (0 problems) |
+| `npm run typecheck` (server + web, strict) | pass |
+| `npm test`: unit + integration on SQLite | pass: 188/188 tests in 19 files |
+| `npm run test:pg`: the same suite on PostgreSQL 16 through the real migrations (incl. the new one) | pending (run in progress) |
+| `npm run build` | pass (web + server bundles) |
+| `npm run test:e2e`: full flow + 390 px phone layout on 10 pages | pass: 2/2 |
+| `npm run test:scale` | pending (run in progress) |
 
-What the integration tests cover concretely:
+## 5. What the system still cannot do (limitations)
 
-- **Pipeline** against mock Google Places, Nominatim and Overpass plus three live fixture
-  websites: 8 found → 6 companies (2 duplicates merged with provenance), the permanently closed
-  business excluded, a booking-platform URL rejected as a website (→ "new business website"
-  offer), a website verified through the phone number printed on it, a phone conflict surfaced
-  as a discrepancy, and findings with evidence plus screenshots for 3 viewports. No Lighthouse
-  data is invented, and every e-mail stored is present in the fixture HTML. The outdated site is
-  ranked above the modern one with "website redesign" as the primary service; the audit and a
-  Polish outreach draft pass the linter. Also: a second run creates no duplicates, a Google
-  outage fails over to the other sources, and pause/resume/cancel checkpoints work.
-- **API**: first-run setup, cookie flags, CSRF and cross-origin rejection, validation, login,
-  the search pause/cancel/retry state machine, the CRM flow (stages, follow-ups, activities,
-  outcomes, contact-time snapshot), manual contact validation, filters, CSV formula injection,
-  export of more than 1,000 leads, erasure, secrets never returned, screenshot path traversal,
-  logout.
-- **Queue, learning, import, retention**: priority claim, no double claim under concurrency,
-  backoff and permanent failure, stale-lease requeue; model training (activates only if it
-  beats the base rate), insufficient-data path; CSV/JSON mapping and sanitisation, import job
-  merge; retention purge including the raw payload, rebuilt company fields and expired
-  listing-only contacts.
-- **Analyzer sandbox**: an analysed page cannot open a WebSocket to a local service. This
-  test fails without the fix.
+1. **Live provider behaviour is unverified.** No request has gone to the real Google Places,
+   Foursquare, Yelp, Brave, Google CSE, public OSM or Anthropic APIs; mappings follow their
+   documentation and are tested against mocks. Watch Settings → Sources and the job's provider
+   panel on the first runs; mapping problems show up there as errors, not as silent bad data.
+2. **Without web search** (no Brave/Google CSE key), businesses whose listings have no website
+   are "website not verified" and are not ranked until you add the site or configure search.
+   This is deliberate: guessing would recreate the false "no website" pitch.
+3. **Bot-protected sites are not analysed** (`blocked`), by design; you judge them yourself.
+4. **Priority is a transparent heuristic.** The outcome model learns from your results and shows
+   a calibrated chance with an interval once it beats the base rate, but it does not re-weight
+   the priority rules automatically. Weights can be changed via the business profile API; there
+   is no UI for it yet.
+5. **Analysis takes time:** ~10 s per site locally, more on real sites; for 100 leads the full
+   job takes tens of minutes (ranked leads appear progressively).
+6. **Coverage:** about 34 niches in the taxonomy; built-in districts for 5 cities; outreach
+   copy in EN/PL/RU/UK/DE; company size is a proxy (reviews/locations).
+7. **Lab performance only** (single load from the worker's location); Lighthouse optional/off.
+8. **One user, no 2FA/roles**; screenshots on local disk; in-memory rate limiter (single API
+   instance).
+9. **Chromium sandbox** is on in Docker, but off by default elsewhere (needs a non-root user with
+   user namespaces).
+10. The domain and challenge lists are heuristics. New directories or protection vendors will
+    appear; add them in `src/lib/url.ts` / `src/providers/website/challenge.ts`.
 
-## 3. Problems found and fixed during the review
-
-| Area | Problem | Fix |
-|---|---|---|
-| Security | Analysed pages could open **WebSockets** to internal services (request interception doesn't cover them) | WebSockets refused per context, WebRTC restricted; regression test |
-| Security | Chromium ran **without its own sandbox** (Playwright default) | `BROWSER_SANDBOX` option; enabled in Docker with Playwright's seccomp profile; verified as uid 1001 |
-| Security | `X-Forwarded-For` was trusted in every production deploy, so the login rate limit could be bypassed | explicit `TRUST_PROXY` (default off); Compose sets 1 hop |
-| Compliance | Retention purge left the **raw provider payload** in place, and provider-only company fields were kept forever | payload cleared; rating, reviews, price and coordinates rebuilt from records still in retention; test |
-| Privacy | No way to delete a company's data | *Delete data* / `DELETE /api/leads/:id` (rows and screenshot files); test |
-| Correctness | CSV/JSON export **crashed** with more than 999 leads (Prisma chunked `IN` + unselected `orderBy` column) | column selected; regression test with 1,100 leads |
-| Correctness | "Mobile issues → opportunity for *website maintenance*": pain points were paired with an unrelated service | a pain point names only a service whose evidence covers it; unit tests |
-| Correctness | `stripDiacritics` lowercased `Ł`/`Ø`/`Æ` | fixed; unit test |
-| Config | `JOB_MAX_LEADS` was declared but not enforced | enforced, and logged in the job |
-| UX | On phones, several page grids sized columns to their content, so panels ran off the screen (Today, Learning, Dashboard, forms) | base single-column template on all 29 responsive grids; E2E phone-layout test (fails before the fix) |
-| Testing | Integration tests depended on live DNS MX lookups | `EMAIL_MX_CHECK` setting (also useful offline) |
-
-## 4. Providers
+## 6. Providers
 
 | Provider | Status |
 |---|---|
-| OpenStreetMap (Nominatim + Overpass) | implemented; works without a key; tested against a mock of both APIs |
-| Google Places API (New) | implemented (text search with field mask, pagination, details); tested against a mock |
-| Foursquare Places (new API + legacy v3) | implemented; not exercised live |
-| Yelp Fusion | implemented (never used as a website source; 24 h retention); not exercised live |
-| Brave Search, Google Programmable Search | implemented as web-discovery engines; Brave tested against a mock |
-| CSV / JSON import | implemented and tested through the API |
-| Anthropic (visual observations, audit prose, outreach) | implemented with structured output, refusal handling, cache and budget; not exercised live (no key in the build environment); every feature has a non-AI path |
-| Lighthouse | optional hook; only used if the `lighthouse` package is installed; not exercised |
+| OpenStreetMap (Nominatim + Overpass) | implemented, keyless; last-edit timestamps used for freshness; tested against mocks |
+| Google Places API (New) | implemented; tested against mocks |
+| Foursquare, Yelp | implemented; not exercised (not even against mocks in the pipeline test) |
+| Brave, Google Programmable Search | implemented; Brave mocked; stricter result filtering added |
+| CSV/JSON import | implemented and tested through the API |
+| Anthropic | implemented (structured output, refusals, cache, budget); not exercised live; every feature works without it |
 
-**Important:** no live calls to the paid providers or to the public OSM servers were made while
-building this. The request and response mappings follow each provider's documented format and
-are checked against mocks. On your first real search, watch Settings → Sources and the job's
-provider panel. Any mapping problem shows up there as a provider error, not as silent bad data.
+## 7. Costs and security (unchanged in substance)
 
-## 5. Costs
-
-- Without keys: $0. OSM, the analysis, scoring, template audits and template outreach are free.
-- Paid APIs: at most one call per query per source, 6–40 queries depending on quantity, a hard
-  cap of `MAX_PROVIDER_CALLS_PER_JOB` (300) per job, and caching (12 h – 30 days).
-- AI: optional, capped by `AI_MONTHLY_TOKEN_BUDGET` (3M tokens by default), cached for 30 days,
-  and never required.
-- Compute: one Chromium per worker. Measured about 14 s for a 20-lead search with 3 live
-  analyses on local fixture sites; real sites take roughly 5–15 s each at concurrency 2.
-  Details: [cost-control.md](cost-control.md).
-
-## 6. Security posture
-
-Implemented and tested: single-owner auth with a setup token, scrypt, hashed session tokens,
-strict cookies, CSRF header plus origin check, rate limits with explicit proxy trust, zod
-validation everywhere, encrypted secrets that are never returned or logged, CSP and helmet
-headers, escaped HTML exports, CSV injection guard, path-safe media, an SSRF guard for HTTP
-(every redirect hop, guarded connect) and for the browser (every request, WebSockets blocked,
-optional Chromium sandbox), robots.txt, no guessed contacts, retention purge, erasure, and no
-sending. Residual risks: DNS rebinding against the browser, a Chromium zero-day, no 2FA or
-roles, an in-memory rate limiter. Mitigations are in [security.md](security.md).
-
-## 7. Known issues and limitations
-
-1. **Live provider behaviour is unverified** (see §4). Expect to adjust field mappings after the
-   first real runs, especially Foursquare's new API and Yelp coverage outside the US.
-2. **Niche taxonomy** covers about 34 niches. Other niches work with the raw term only (lower
-   recall, no OSM tags); add them to `src/domain/taxonomy.ts`.
-3. **Built-in districts** exist for Warsaw, Kraków, Wrocław, Prague and Berlin. Other cities get
-   districts from OSM only when the request is over 40 leads and OSM is enabled.
-4. **Outreach languages**: EN, PL, RU, UK, DE. Other countries' drafts fall back to English
-   (the AI mode can translate).
-5. **Company size** is a proxy (review count, number of locations). No firmographic data source
-   is integrated.
-6. **Performance numbers are single lab loads** from the worker's location, not field data.
-   Lighthouse is optional and off.
-7. **One user.** There are no roles, no teams and no 2FA.
-8. **Screenshots are on local disk** (`DATA_DIR`). Several API instances need shared storage.
-9. **Chromium sandbox** is off by default outside Docker, because it needs a non-root user with
-    user namespaces.
-10. The query-template statistics are computed on the fly over all past queries. That is fine
-    for thousands of queries, but should become an aggregate table at a larger scale.
+- Costs: $0 without keys; paid calls capped per job (`MAX_PROVIDER_CALLS_PER_JOB`), cached
+  12 h – 30 days; AI optional and budgeted. Details: [cost-control.md](cost-control.md).
+- Security: auth with setup token, hashed sessions, CSRF protection, rate limits with explicit
+  proxy trust, validation, encrypted secrets that are never returned or logged, CSP, escaped
+  exports, CSV injection guard, SSRF guard for HTTP and the browser (WebSockets blocked, optional
+  Chromium sandbox), bot protection never bypassed, bounded browser work, retention purge,
+  erasure, no sending. Details and residual risks: [security.md](security.md).
 
 ## 8. Next improvements (in order of value)
 
-1. First real runs with your keys on 2–3 cities; fix any mapping issues they reveal; record the
-   real cost per 100 leads.
-2. Record outcomes from the first 40+ contacted leads so the model and the template-yield loop
-   have data (Learning shows progress).
-3. A suppression list, so erased or do-not-contact businesses are not re-added by later
-   searches (matched by domain and phone).
-4. More niches and district lists for your target markets; outreach phrases in more languages.
-5. An optional Lighthouse or PageSpeed Insights integration for pages that justify it (top
-   leads only).
-6. 2FA (TOTP) and a second role (assistant) if more people use the tool.
-7. Object storage for screenshots and a shared rate-limit store for multi-instance deployments.
+1. First real runs with your keys on 2–3 cities; fix whatever mapping issues they reveal;
+   record real cost and time per 100 leads.
+2. Configure a web-search key (Brave is cheapest) so "website not verified" becomes "found" or
+   "no website".
+3. Record outcomes for the first 40+ contacted leads so the model and query ordering learn.
+4. A UI for scoring weights, fed by the learning insights.
+5. A suppression list (domain/phone) so erased or do-not-contact businesses are not re-added.
+6. More niches, district lists and outreach languages for your markets.
+7. 2FA, object storage for screenshots, and a shared rate-limit store if more people use it.
 
-## 9. Self-audit: "Could I personally use this every morning to find better clients?"
+## 9. Self-audit: "Could I use this every morning to find better clients?"
 
-**Yes, with one condition.** Today gives a morning list built from real data: overdue
-follow-ups, replies waiting, new high-priority leads without a draft, stale proposals, and
-leads that need review. Each item links to the exact leads. A search produces a ranked list
-where every position says *why*: the evidence, the screenshots, what to offer and what not to
-claim. The audit and the first message take one click each and don't overclaim. Nothing is
-sent without you, and every result you record makes the next ranking better.
+**Yes, as a working draft of the morning routine, not as a finished product.** The failures that
+would have hurt most on a real morning are fixed and tested:
+- confident but false "no website" pitches;
+- "fresh" data that was years old;
+- analyses of bot-challenge pages;
+- a search that shows nothing for 25 minutes;
+- a job that waits forever when no worker runs;
+- a frozen page that hangs everything.
 
-The condition is §4 and §7.1: the system has only been exercised against mocks and local
-fixture websites. The first week of real use should include watching provider errors and
-sanity-checking the top 10 leads of each search by hand. The tool makes that easy, because
-every score opens to its evidence.
+Every score still opens to its evidence, and nothing is sent without you. The honest remaining
+risk is §5.1: until it has run against the real APIs, the first week needs a human check of the
+top 10 leads per search, and a look at the provider panel.

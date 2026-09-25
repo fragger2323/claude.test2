@@ -67,11 +67,11 @@ shown as gaps and lower `dataCompleteness`; they never count as zero.
 
 | Component | Weight | How it is computed |
 |---|---|---|
-| Website Need | 0.25 | No website → 90. Unreachable and not analysed → 55. Not analysed → *gap*. Otherwise `100 × (1 − e^(−points/60))` where each negative finding adds critical 25 / high 15 / medium 8 / low 3, × confidence (1 / 0.8 / 0.5), × 0.6 for AI observations. The factors list the top categories with an example finding. |
+| Website Need | 0.25 | No website (confirmed: web search ran, or a source lists only a social/directory profile) → 90. Website *not verified* (no source listed one and no web search ran) → *gap*, and priority is "insufficient data" — never a "no website" pitch. Unreachable and not analysed → 55. Not analysed → *gap*. Otherwise `100 × (1 − e^(−points/60))` where each negative finding adds critical 25 / high 15 / medium 8 / low 3, × confidence (1 / 0.8 / 0.5), × 0.6 for AI observations. The factors list the top categories with an example finding. |
 | Service Fit | 0.20 | fit score of the primary service |
 | Business Fit | 0.15 | starts at 50. Preferred industry +20; business model matches +10 / differs −10; preferred city +5; preferred country +5; operational +10, temporarily closed −30, permanently closed → 0 and excluded; size proxy (review count / locations) below your minimum −25, meets it +5; website age signal (copyright year) ±. An excluded industry → 0 and excluded. |
 | Contactability | 0.15 | e-mail on the website +45 (from a listing +30); contact form +30; verified phone +25 (listed +15); social profile +10; capped at 100 |
-| Freshness | 0.05 | freshness score (see [search-engine.md](search-engine.md#4-verifying-status-freshness-exclusions)) |
+| Freshness | 0.05 | freshness score from a live website check, a maintained listing (Google/Foursquare/Yelp, capped at 85) or the source's own last-edit date — never from the time we fetched the data; undated data is a *gap* (see [search-engine.md](search-engine.md#4-verifying-status-freshness-exclusions)) |
 | Technical Opportunity | 0.10 | `12 ×` distinct measured technical, performance, SEO, accessibility or security issue types, capped at 100 |
 | Commercial Relevance | 0.10 | starts at 30. Price level ≥ 3 +25, = 2 +10, = 1 −5; reviews > 200 +25, > 50 +15, > 10 +5; 2+ locations +15; premium keyword in name or category +10; high-value service industry +5; target price segment ±10. With no price, review or location data it is flagged as unknown. |
 

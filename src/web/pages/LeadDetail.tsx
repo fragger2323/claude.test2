@@ -355,6 +355,46 @@ function OutreachEditor({ o, leadId, emails }: { o: Outreach; leadId: string; em
   );
 }
 
+/** No known website: say exactly why, and let the user add the real one (it is then analysed live). */
+function WebsiteMissing({ status, reason, onSave, saving }: { status: string | null; reason: string | null; onSave: (url: string) => void; saving: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const label = status === 'not_found' ? 'No official website found' : status === 'unverified' ? 'Website not verified' : 'Website not checked yet';
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span className="text-warn" title={reason ?? undefined}>
+        {label}
+      </span>
+      {editing ? (
+        <form
+          className="inline-flex items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value.trim()) onSave(value.trim());
+          }}
+        >
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…" aria-label="Official website" className="h-7 w-52 text-[12px]" autoFocus />
+          <Button size="sm" type="submit" loading={saving}>
+            Save & analyse
+          </Button>
+        </form>
+      ) : (
+        <button type="button" className="text-accent hover:underline" onClick={() => setEditing(true)}>
+          Add website
+        </button>
+      )}
+    </span>
+  );
+}
+
+const ANALYSIS_STATUS_TEXT: Record<string, string> = {
+  blocked: 'The site shows bot protection to automated visitors, so it was not analysed and nothing is concluded about it (protection is never bypassed). Open it yourself to judge it.',
+  partial: 'Partial analysis — some viewports or pages could not be loaded; findings cover what was seen.',
+  failed: 'The analysis could not load the site in a browser; no findings were recorded.',
+  unreachable: 'The website did not respond (or returned an error page) when checked. The business is not assumed closed.',
+  robots_disallowed: 'robots.txt asks automated tools not to visit this site, so it was not analysed.',
+};
+
 // ───────────── page ─────────────
 export default function LeadDetail() {
   const { id } = useParams();
@@ -451,7 +491,7 @@ export default function LeadDetail() {
                   {hostname(c.website.url)} <ExternalLink className="size-3" />
                 </a>
               ) : (
-                <span className="text-warn">{c.website?.status === 'not_found' ? 'No official website found' : 'Website not checked yet'}</span>
+                <WebsiteMissing status={c.website?.status ?? null} reason={c.website?.notFoundReason ?? null} onSave={(website) => patch.mutate({ website })} saving={patch.isPending} />
               )}
               <span>{[c.address, c.city, c.country].filter(Boolean).join(', ')}</span>
               {c.industry && <span>{c.industry}</span>}
@@ -654,7 +694,7 @@ export default function LeadDetail() {
               <div className="space-y-3">
                 {la.status !== 'completed' && (
                   <div className="rounded-md bg-warn-soft px-3 py-2 text-[12px] text-warn">
-                    Analysis status: {la.status}. {la.errors.slice(0, 2).join(' · ')}
+                    {ANALYSIS_STATUS_TEXT[la.status] ?? `Analysis status: ${la.status}.`} {la.errors.slice(0, 2).join(' · ')}
                   </div>
                 )}
                 <Tabs tabs={CATEGORY_TABS.map((t) => ({ id: t.id, label: t.label, count: findings.filter(t.match).length }))} value={tab} onChange={setTab} />

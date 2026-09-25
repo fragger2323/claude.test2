@@ -53,6 +53,19 @@ for (const n of NICHES) {
   }
 }
 
+/** Tokens that identify this business rather than its industry ("dentim", "kowalczyk"). */
+export function distinctiveTokens(name: string): string[] {
+  return nameTokens(name).filter((t) => t.length > 1 && !GENERIC_TOKENS.has(t) && !/^\d+$/.test(t));
+}
+
+/** Name similarity on distinctive tokens; falls back to the full name when one side has none. */
+export function distinctiveSimilarity(a: string, b: string): number {
+  const ta = distinctiveTokens(a);
+  const tb = distinctiveTokens(b);
+  if (ta.length === 0 || tb.length === 0) return nameSimilarity(a, b);
+  return nameSimilarity(ta.join(' '), tb.join(' '));
+}
+
 export function isGenericName(name: string): boolean {
   const toks = nameTokens(name).filter((t) => t.length > 1);
   if (toks.length === 0) return true;
@@ -98,7 +111,9 @@ export function matchRecords(a: ResolvableRecord, b: ResolvableRecord, sharedPho
   // Hard conflict: two different official domains are two different companies (or bad data).
   if (a.domain && b.domain && a.domain !== b.domain) return { score: 0, reasons: [], blocked: `different websites (${a.domain} vs ${b.domain})` };
 
-  const sim = nameSimilarity(a.name, b.name);
+  // Compare the distinctive part of the names: "Centrum Implantologii Wiśniewska" and
+  // "Centrum Implantologii Nowakowski" share only industry words and are different businesses.
+  const sim = distinctiveSimilarity(a.name, b.name);
   const dist = a.lat != null && a.lng != null && b.lat != null && b.lng != null ? haversineMeters({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }) : null;
   const sameAddress = !!a.addressKey && a.addressKey === b.addressKey;
   const samePostal = !!a.postalCode && a.postalCode === b.postalCode;
@@ -137,8 +152,9 @@ export function matchRecords(a: ResolvableRecord, b: ResolvableRecord, sharedPho
     reasons.push('generic name but identical address and location');
   }
   if (differentCity && score < 0.9) return { score: 0, reasons: [], blocked: 'different cities' };
-  // far apart with no website/phone evidence → do not merge
-  if (dist != null && dist > 2000 && score < 0.88) return { score: 0, reasons: [], blocked: `${Math.round(dist)} m apart` };
+  // far apart: only the same official website can still merge them (a shared phone cannot)
+  const sameDomain = !!a.domain && a.domain === b.domain;
+  if (dist != null && dist > 2000 && !sameDomain) return { score: 0, reasons: [], blocked: `${Math.round(dist)} m apart` };
   return { score, reasons };
 }
 

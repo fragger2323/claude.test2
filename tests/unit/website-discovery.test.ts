@@ -56,9 +56,18 @@ describe('discoverWebsite', () => {
     expect(d.url).toContain('smile-dental.pl');
   });
 
-  it('with nothing to check it reports exactly what was checked', async () => {
+  it('with nothing to check it says the website is unverified (not "no website") and why', async () => {
     const d = await discoverWebsite(company, [], { fetchHomepage: async (u) => page(u, ''), searchAvailable: false });
-    expect(d.status).toBe('not_found');
-    expect(d.notFoundReason).toMatch(/.+/);
+    expect(d.status).toBe('unverified');
+    expect(d.notFoundReason).toMatch(/web search is not configured/);
+  });
+
+  it('a bot-protected listed site is found (exists), not "unreachable"', async () => {
+    const d = await discoverWebsite(company, [{ url: 'https://smile-dental.pl', source: 'google_places', evidence: 'websiteUri' }], {
+      fetchHomepage: async (u) => ({ ...page(u, 'Just a moment...', false), status: 403, error: undefined }),
+      searchAvailable: false,
+    });
+    expect(d.status).toBe('found');
+    expect(d.log[0]!.reasons.join(' ')).toMatch(/bot protection/);
   });
 });

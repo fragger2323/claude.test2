@@ -22,6 +22,7 @@ import { advanceStage, qualifyLead } from '../qualify/qualify-lead.js';
 import { generateAuditForLead } from '../reports/generate.js';
 import { clusterRecords, companyToResolvable, domainKey, mergeRecords, toResolvable, type ResolvableRecord } from '../resolution/entity-resolution.js';
 import { planSearch, resolveNiche, type PlannedQuery } from '../strategy/strategy-engine.js';
+import { MAINTAINED_SOURCES } from '../freshness/freshness.js';
 
 /**
  * The search job pipeline:
@@ -75,6 +76,7 @@ export function recordFromRow(r: {
   priceLevel: number | null;
   payload: unknown;
   fetchedAt: Date;
+  sourceUpdatedAt?: Date | null;
 }): NormalizedBusiness {
   const socials = jsonArray<{ network: string; url: string }>(jsonObject<{ socials?: unknown }>(r.payload, {}).socials);
   return {
@@ -100,6 +102,7 @@ export function recordFromRow(r: {
     priceLevel: r.priceLevel ?? undefined,
     socials,
     fetchedAt: r.fetchedAt,
+    sourceUpdatedAt: r.sourceUpdatedAt ?? undefined,
   };
 }
 
@@ -327,6 +330,7 @@ export class SearchPipeline {
         priceLevel: r.priceLevel,
         payload: { ...(r.raw ?? {}), socials: r.socials ?? [] } as Prisma.InputJsonValue,
         fetchedAt: r.fetchedAt,
+        sourceUpdatedAt: r.sourceUpdatedAt ?? null,
         lastSeenAt: now,
         retentionExpiresAt: retentionHours ? new Date(now.getTime() + retentionHours * 3_600_000) : null,
         purgedAt: null,
@@ -526,9 +530,10 @@ export class SearchPipeline {
         const ex = this.params.excludedIndustries.find((x) => x && cats.includes(x.toLowerCase()));
         if (ex) reason = `Excluded industry (“${ex}”)`;
       }
-      const newest = c.sourceRecords.reduce<Date | null>((m, r) => (!m || r.fetchedAt > m ? r.fetchedAt : m), null);
+      // "Verified" only by sources that maintain open/closed status (not by the time we fetched an OSM record).
+      const newest = c.sourceRecords.filter((r) => MAINTAINED_SOURCES.has(r.provider)).reduce<Date | null>((m, r) => (!m || r.fetchedAt > m ? r.fetchedAt : m), null);
       await db().campaignLead.update({ where: { id: cl.id }, data: { excludedReason: reason } });
-      await db().company.update({ where: { id: c.id }, data: { lastVerifiedAt: c.lastVerifiedAt && newest && c.lastVerifiedAt > newest ? c.lastVerifiedAt : newest } });
+      if (newest && (!c.lastVerifiedAt || newest > c.lastVerifiedAt)) await db().company.update({ where: { id: c.id }, data: { lastVerifiedAt: newest } });
       if (!reason) {
         const stage = advanceStage(lead.stage, 'verified');
         if (stage !== lead.stage) await db().lead.update({ where: { id: lead.id }, data: { stage, stageChangedAt: new Date() } });
@@ -540,16 +545,18 @@ export class SearchPipeline {
   private async websiteDiscovery(): Promise<void> {
     const cls = (await this.jobLeads()).filter((cl) => !cl.excludedReason);
     const staleMs = 30 * 86_400_000;
+    const searchAvailable = this.deps.registry.webDiscovery.isConfigured() && !this.deps.registry.disabled.has('web_search');
+
     const todo = cls.filter((cl) => {
       const w = cl.lead.company.website;
       if (!w) return true;
       if (w.status === 'found') return false;
-      return !w.lastCheckedAt || Date.now() - w.lastCheckedAt.getTime() > staleMs || w.status === 'unreachable';
+      // unverified sites are retried as soon as web search is available
+      return !w.lastCheckedAt || Date.now() - w.lastCheckedAt.getTime() > staleMs || w.status === 'unreachable' || (w.status === 'unverified' && searchAvailable);
     });
     const webSearchBudget = Math.ceil(this.params.quantity * 1.5);
     let webSearches = 0;
     const budget = new CallBudget(Math.max(10, webSearchBudget));
-    const searchAvailable = this.deps.registry.webDiscovery.isConfigured() && !this.deps.registry.disabled.has('web_search');
     let done = 0;
     await mapLimit(
       todo,
@@ -629,6 +636,10 @@ export class SearchPipeline {
     const notes = [`Analysing ${todo.length} website(s); ${fresh.length} reused from analyses newer than ${this.cfg.REANALYZE_AFTER_DAYS} days.`];
     if (skipped > 0) notes.push(`${skipped} lower-ranked website(s) not analysed to control cost (use “Analyze” on a lead to run it).`);
     await this.appendLog(notes);
+    // Rank everything provisionally now (source contacts + known data), then re-rank each lead as
+    // soon as its website is analysed — contact-ready leads appear while the job is still running.
+    const model = await loadActiveModel('reply');
+    await this.qualifyProvisionally(model);
     let done = 0;
     await mapLimit(
       todo,
@@ -638,11 +649,24 @@ export class SearchPipeline {
         await analyzeCompanyWebsite(cl.lead.companyId, { ai: this.deps.registry.ai, visualAi: this.params.visualAi, searchJobId: this.searchJobId, log: this.log, signal: this.deps.signal }).catch((e) =>
           this.log.warn({ companyId: cl.lead.companyId, error: errorMessage(e) }, 'analysis error (isolated)'),
         );
+        await qualifyLead(cl.leadId, { params: this.params, log: this.log, model }).catch((e) => this.log.warn({ leadId: cl.leadId, error: errorMessage(e) }, 'qualification failed (isolated)'));
         done++;
         await this.setProgress('analyzing', done, todo.length);
       },
       this.deps.signal,
     );
+  }
+
+  /** Store public contacts from the sources and score every lead with what is known so far. */
+  private async qualifyProvisionally(model: Awaited<ReturnType<typeof loadActiveModel>>): Promise<void> {
+    const cls = await this.jobLeads();
+    let i = 0;
+    for (const cl of cls) {
+      if (++i % 25 === 0) await this.checkControl();
+      const c = cl.lead.company;
+      await storeContacts(c.id, contactsFromSources(c.sourceRecords.filter((r) => !r.purgedAt).map(recordFromRow), c.country), c.primaryDomain);
+      await qualifyLead(cl.leadId, { params: this.params, log: this.log, model }).catch((e) => this.log.warn({ leadId: cl.leadId, error: errorMessage(e) }, 'qualification failed (isolated)'));
+    }
   }
 
   // ───────────── contacts ─────────────
@@ -715,6 +739,7 @@ export async function computeJobCounts(searchJobId: string): Promise<SearchCount
     const w = l.company.website;
     if (w?.status === 'found' || w?.status === 'unreachable') counts.websites++;
     if (w?.status === 'not_found') counts.noWebsite++;
+    if (w?.status === 'unverified') counts.websiteUnverified++;
     if (w?.lastAnalyzedAt) counts.analyzed++;
     if (cl.excludedReason) continue;
     switch (l.priority) {

@@ -145,28 +145,40 @@ describe('sales potential', () => {
 
 describe('freshness', () => {
   const now = new Date('2026-09-24T00:00:00Z');
-  it('recent corroborated data is fresh', () => {
-    const r = computeFreshness({ sourceFetches: [new Date('2026-09-23'), new Date('2026-09-20')], lastVerifiedAt: null, analysisAt: null, businessStatus: 'operational', discrepancyCount: 0, providerCount: 2, now });
-    expect(r.score).toBeGreaterThanOrEqual(90);
-    expect(r.label).toBe('fresh');
+  const src = (provider: string, fetchedAt: string, sourceUpdatedAt?: string) => ({ provider, fetchedAt: new Date(fetchedAt), sourceUpdatedAt: sourceUpdatedAt ? new Date(sourceUpdatedAt) : null });
+
+  it('fetching an old OpenStreetMap record today does not make it fresh', () => {
+    const r = computeFreshness({ sources: [src('osm', '2026-09-24', '2016-05-01')], liveVerifiedAt: null, businessStatus: 'unknown', discrepancyCount: 0, now });
+    expect(r.label).toBe('stale');
+    expect(r.factors[0]!.label).toMatch(/last edited 2016-05-01/);
+    const undated = computeFreshness({ sources: [src('osm', '2026-09-24')], liveVerifiedAt: null, businessStatus: 'unknown', discrepancyCount: 0, now });
+    expect(undated.label).toBe('unknown');
+    expect(undated.factors[0]!.label).toMatch(/cannot tell/);
   });
 
-  it('old data ages, conflicts reduce, permanently closed zeroes', () => {
-    const old = computeFreshness({ sourceFetches: [new Date('2026-01-01')], lastVerifiedAt: null, analysisAt: null, businessStatus: 'operational', discrepancyCount: 0, providerCount: 1, now });
-    expect(old.score).toBeLessThan(40);
-    const conflict = computeFreshness({ sourceFetches: [new Date('2026-09-23')], lastVerifiedAt: null, analysisAt: null, businessStatus: 'operational', discrepancyCount: 2, providerCount: 1, now });
+  it('a live website check is the strongest signal; maintained listings are capped', () => {
+    const listed = computeFreshness({ sources: [src('google_places', '2026-09-23')], liveVerifiedAt: null, businessStatus: 'operational', discrepancyCount: 0, now });
+    expect(listed.score).toBe(85);
+    const live = computeFreshness({ sources: [src('google_places', '2026-09-23'), src('osm', '2026-09-23', '2020-01-01')], liveVerifiedAt: new Date('2026-09-23'), businessStatus: 'operational', discrepancyCount: 0, now });
+    expect(live.score).toBe(100);
+    expect(live.label).toBe('fresh');
+    expect(live.factors[0]!.label).toMatch(/checked live/);
+  });
+
+  it('conflicts reduce, permanently closed zeroes', () => {
+    const conflict = computeFreshness({ sources: [src('google_places', '2026-09-23')], liveVerifiedAt: new Date('2026-09-23'), businessStatus: 'operational', discrepancyCount: 2, now });
     expect(conflict.score).toBe(90);
-    const closed = computeFreshness({ sourceFetches: [new Date('2026-09-23')], lastVerifiedAt: null, analysisAt: null, businessStatus: 'closed_permanently', discrepancyCount: 0, providerCount: 1, now });
+    const closed = computeFreshness({ sources: [src('google_places', '2026-09-23')], liveVerifiedAt: null, businessStatus: 'closed_permanently', discrepancyCount: 0, now });
     expect(closed.score).toBe(0);
   });
 
   it('an unreachable website is not treated as closed', () => {
-    const r = computeFreshness({ sourceFetches: [new Date('2026-09-23')], lastVerifiedAt: null, analysisAt: null, businessStatus: 'operational', discrepancyCount: 0, providerCount: 1, websiteStatus: 'unreachable', now });
-    expect(r.score).toBe(100);
+    const r = computeFreshness({ sources: [src('google_places', '2026-09-23')], liveVerifiedAt: null, businessStatus: 'operational', discrepancyCount: 0, websiteStatus: 'unreachable', now });
+    expect(r.score).toBe(85);
     expect(r.factors.some((x) => /not treated as closed/.test(x.label))).toBe(true);
   });
 
   it('no dated information → unknown', () => {
-    expect(computeFreshness({ sourceFetches: [], lastVerifiedAt: null, analysisAt: null, businessStatus: 'unknown', discrepancyCount: 0, providerCount: 0, now }).label).toBe('unknown');
+    expect(computeFreshness({ sources: [], liveVerifiedAt: null, businessStatus: 'unknown', discrepancyCount: 0, now }).label).toBe('unknown');
   });
 });
