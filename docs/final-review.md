@@ -37,7 +37,7 @@ mocks and local websites (§6). Treat the first week of real use as the final ac
 | 20 | Outcomes saved? | Yes, with features frozen at contact time (tests). | Unchanged. |
 | 21 | Train qualification on my results? | **Partly.** The model (≥ 40 labelled leads, must beat the base rate) produces a calibrated chance with interval, and insights. Priority rules stay transparent heuristics (weights are configurable via the business profile API, not in the UI). | Unchanged. Stated plainly in §5. |
 | 22 | Portfolio matching? | Correct: only stored facts, threshold 0.4, nothing suggested otherwise (tests). | Unchanged. |
-| 23 | Search → contact-ready speed | **Slow to show anything:** scoring ran only after all analyses, so the first ranked lead appeared after **24.6 min** in the 100-lead run. | Progressive scoring: every lead is scored provisionally when analysis starts and re-scored as soon as its site is analysed. First contact-ready lead after about 2 min in the scale run (§3). |
+| 23 | Search → contact-ready speed | **Slow to show anything:** scoring ran only after all analyses, so the first ranked lead appeared after **24.6 min** in the 100-lead run. | Progressive scoring: every lead is scored provisionally when analysis starts and re-scored as soon as its site is analysed. First contact-ready lead after 66 s in the scale run (§3). |
 | 24 | UI clear? | Mostly. "Waiting for the worker…" forever; raw status words; 6 empty cards on day one. | Worker warning, explained analysis statuses, "website not verified" with *Add website*, empty Today sections collapsed into one line. |
 | 25 | Generic AI dashboard style? | **Yes, partly:** an "AI" logo tile and the stock indigo accent. | Neutral crosshair mark and a deep-teal accent (contrast 6.3:1 light, 9:1 dark). Purple is kept only to mark AI-generated content. |
 | 26 | Security | Reviewed in the first round (WebSockets, sandbox, proxy trust, erasure). | Plus: bot protection never bypassed, bounded browser work, no AI on challenge screenshots. |
@@ -74,21 +74,26 @@ thread, bot challenge, never-ending response. Machine: 4 vCPU, 16 GB.
 
 | Metric | Before fixes | After fixes (with hostile sites) |
 |---|---|---|
-| Job status | completed | pending |
-| Total time | 24.6 min | pending |
-| First ranked lead | 24.6 min (at the very end) | pending |
-| First contact-ready lead | 24.6 min | pending |
-| Unique companies (expected 180) | **179** (false merge) | pending |
-| Leads falsely pitched "no website" | **10** of 39 | pending |
-| Websites analysed / statuses | 140 completed | pending |
-| Hung jobs | – (no hostile sites) | pending |
-| Peak browser contexts / peak requests to one site | 2 / 24 | pending |
-| Provider calls | 51 | pending |
+| Job status | completed | completed |
+| Total time | 24.6 min | 25.7 min (includes the 9 hostile sites, each cut off by its time limits) |
+| First ranked lead | 24.6 min (at the very end) | **66 s** |
+| First contact-ready lead | 24.6 min | **66 s**; 131 contact-ready at the end |
+| Unique companies (expected 180) | **179** (false merge) | **180** (50 duplicates merged correctly) |
+| Leads falsely pitched "no website" | **10** of 39 | **0**. 40 are "website not verified" (10 have a site that no source lists, 30 have none); none of them is ranked or pitched a service |
+| Websites analysed / statuses | 140 completed | 140: 131 completed, 3 `blocked` (bot challenge), 3 `failed` (frozen page), 3 `unreachable` (endless response). No findings on any of the 9 hostile sites; they are "insufficient data" or "site could not be reached" |
+| Hung jobs | – (no hostile sites) | none |
+| Peak browser contexts / peak requests to one site | 2 / 24 | 2 / 25 (at most 4 concurrent requests to all sites) |
+| Provider calls | 51 | 51 |
+| Peak memory (RSS) | 255 MB | 265 MB |
 
-Throughput is ~10 s per site at the default concurrency (2 browser contexts) on these local
-sites. Real sites are slower, so expect roughly 20–40 minutes for 100 leads with analysis, while
-ranked leads keep appearing from the first minutes. `BROWSER_POOL_SIZE` and
-`ANALYSIS_CONCURRENCY` (e.g. 3–4 on a 4-core machine) trade CPU/RAM for speed.
+The "after" numbers come from the final code. An earlier post-fix run, made before the last two
+small changes, gave the same result to within a second.
+
+Throughput is ~10.7 s per site at the default concurrency (2 browser contexts) on these local
+sites, so the full job took 25.7 min even locally. Real sites are slower: expect roughly
+25–60 minutes for a 100-lead search with analysis, while ranked leads appear from the first
+minute. `BROWSER_POOL_SIZE` and `ANALYSIS_CONCURRENCY` (e.g. 3–4 on a 4-core machine) trade
+CPU/RAM for speed; that was not measured here.
 
 ## 4. Verification after the fixes
 
@@ -100,7 +105,7 @@ ranked leads keep appearing from the first minutes. `BROWSER_POOL_SIZE` and
 | `npm run test:pg`: the same suite on PostgreSQL 16 through the real migrations (incl. the new one) | pass: 189/189; `prisma migrate deploy` applied `20260925065312_source_updated_at` |
 | `npm run build` | pass (web + server bundles) |
 | `npm run test:e2e`: full flow + 390 px phone layout on 10 pages | pass: 2/2 |
-| `npm run test:scale` | pending (run in progress) |
+| `npm run test:scale` | pass: job completed, 180/180 companies (numbers in §3) |
 
 ## 5. What the system still cannot do (limitations)
 
