@@ -80,6 +80,9 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
   const scoring: FindingForScoring[] = findings;
   const websiteStatus = (c.website?.status ?? 'none') as 'found' | 'not_found' | 'unreachable' | 'unverified' | 'none';
   const analyzed = !!analysis && ['completed', 'partial'].includes(analysis.status);
+  // A newer attempt that failed (e.g. the page froze) must not read as "not analysed yet".
+  const lastAttempt = c.website ? await db().analysis.findFirst({ where: { websiteId: c.website.id, status: { not: 'running' } }, orderBy: { startedAt: 'desc' }, select: { status: true, startedAt: true } }) : null;
+  const analysisStatus = lastAttempt?.status === 'failed' && (!analysis || lastAttempt.startedAt > analysis.startedAt) ? 'failed' : (analysis?.status ?? null);
   const nicheKey = resolveNiche(c.industry ?? params.niche ?? '').def?.key ?? null;
   const contacts = c.contacts.filter((x) => !x.expiredAt).map((x) => ({ type: x.type, status: x.status, isRoleBased: x.isRoleBased, isPersonal: x.isPersonal, value: x.value, sourceUrl: x.sourceUrl }));
   const activeSources = c.sourceRecords.filter((s) => !s.purgedAt);
@@ -107,7 +110,7 @@ export async function qualifyLead(leadId: string, ctx: QualifyContext): Promise<
       isExistingClient: c.isExistingClient,
       doNotContact: c.doNotContact,
     },
-    website: { status: websiteStatus, analyzed, analysisStatus: analysis?.status ?? null },
+    website: { status: websiteStatus, analyzed, analysisStatus },
     findings: scoring,
     contacts,
     freshness: { score: freshness.label === 'unknown' ? null : freshness.score, factors: freshness.factors },

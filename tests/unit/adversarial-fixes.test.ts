@@ -42,6 +42,24 @@ describe('website existence is never assumed', () => {
     expect(m.primary).toBeNull();
     expect(m.all.find((x) => x.serviceSlug === 'new-business-website')!.fitScore).toBe(0);
   });
+
+  it('a failed or blocked analysis says so instead of "not analysed yet", and concludes nothing', () => {
+    const base: LeadFitInput = {
+      company: { name: 'Gabinet Kowalski', industry: 'dentist', categories: [], city: 'Warszawa', country: 'PL', businessStatus: 'operational', rating: 4.7, ratingCount: 23, priceLevel: null, locations: 1, isExistingClient: false, doNotContact: false },
+      website: { status: 'found', analyzed: false, analysisStatus: 'failed' },
+      findings: [],
+      serviceFit: { score: null, serviceName: null },
+      contacts: [{ type: 'phone', status: 'probable' }],
+      freshness: { score: 85, factors: [] },
+      previouslyContacted: false,
+    };
+    const failed = computeLeadFit(base);
+    expect(failed.priority).toBe('insufficient_data');
+    expect(failed.priorityReasons[0]).toMatch(/analysis failed/);
+    expect(failed.components.find((c) => c.key === 'websiteNeed')!.score).toBeNull();
+    const blocked = computeLeadFit({ ...base, website: { status: 'found', analyzed: false, analysisStatus: 'blocked' } });
+    expect(blocked.priorityReasons[0]).toMatch(/bot protection/);
+  });
 });
 
 describe('contacts are attributed carefully', () => {

@@ -73,7 +73,14 @@ function websiteNeed(i: LeadFitInput): ScoreComponent {
     return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: 55, weight: 0, factors: [{ label: 'Listed website could not be reached (cause unknown)', points: 55, kind: 'observation' }] };
   }
   if (!i.website.analyzed) {
-    const label = i.website.analysisStatus === 'blocked' ? 'Site shows bot protection to automated visitors — not analysed (check it yourself)' : i.website.analysisStatus === 'robots_disallowed' ? 'robots.txt asks tools not to visit — not analysed' : 'Website not analysed yet';
+    const label =
+      i.website.analysisStatus === 'blocked'
+        ? 'Site shows bot protection to automated visitors — not analysed (check it yourself)'
+        : i.website.analysisStatus === 'robots_disallowed'
+          ? 'robots.txt asks tools not to visit — not analysed'
+          : i.website.analysisStatus === 'failed'
+            ? 'Last analysis failed (the page did not respond in time) — nothing concluded'
+            : 'Website not analysed yet';
     return { key: 'websiteNeed', label: COMPONENT_LABELS.websiteNeed, score: null, weight: 0, factors: [{ label, points: 0, kind: 'gap' }] };
   }
   const negative = i.findings.filter((f) => f.polarity === 'negative');
@@ -320,7 +327,9 @@ export function computeLeadFit(i: LeadFitInput): LeadFitResult {
       i.website.status === 'found' && !i.website.analyzed
         ? i.website.analysisStatus === 'blocked'
           ? 'Website blocks automated analysis (bot protection) — review it manually'
-          : 'Website found but not analysed yet'
+          : i.website.analysisStatus === 'failed'
+            ? 'Website analysis failed (the page did not respond in time) — re-run it or review the site manually'
+            : 'Website found but not analysed yet'
         : `Only ${Math.round(dataCompleteness * 100)}% of scoring inputs are available`,
     );
   } else if (leadFit >= 72 && (wn ?? 0) >= 60 && (sf ?? 0) >= 55 && ct >= 40) priority = 'very_high';
